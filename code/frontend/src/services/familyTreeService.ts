@@ -1,37 +1,8 @@
 import { api } from './api';
+import type { FamilyTree, Person } from '@/types';
 
-export interface FamilyTree {
-  id: string;
-  name: string;
-  description?: string;
-  people_count?: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Person {
-  id: string;
-  first_name: string;
-  middle_name?: string;
-  last_name?: string;
-  maiden_name?: string;
-  nickname?: string;
-  gender?: 'M' | 'F' | 'O';
-  birth_date?: string;
-  death_date?: string;
-  birth_place?: string;
-  death_place?: string;
-  occupation?: string;
-  father_id?: string;
-  mother_id?: string;
-  notes?: string;
-  father?: Person;
-  mother?: Person;
-  children?: Person[];
-  is_living?: boolean;
-  full_name?: string;
-  age?: number;
-}
+// Re-export main types for convenience
+export type { FamilyTree, Person } from '@/types';
 
 export interface CreateFamilyTreeData {
   name: string;
@@ -40,7 +11,6 @@ export interface CreateFamilyTreeData {
 
 export interface CreatePersonData {
   first_name: string;
-  middle_name?: string;
   last_name?: string;
   maiden_name?: string;
   nickname?: string;
@@ -49,10 +19,38 @@ export interface CreatePersonData {
   death_date?: string;
   birth_place?: string;
   death_place?: string;
-  occupation?: string;
   father_id?: string;
   mother_id?: string;
   notes?: string;
+}
+
+export interface AddParentData {
+  parent_type: 'father' | 'mother';
+  first_name: string;
+  last_name?: string;
+  gender?: 'M' | 'F' | 'O';
+  birth_date?: string;
+  death_date?: string;
+}
+
+export interface CreateSpouseData {
+  first_name: string;
+  last_name?: string;
+  maiden_name?: string;
+  nickname?: string;
+  gender?: 'M' | 'F' | 'O';
+  birth_date?: string;
+  death_date?: string;
+  birth_place?: string;
+  death_place?: string;
+  notes?: string;
+  is_deceased?: boolean;
+  // Relationship fields
+  relationship_type: 'spouse' | 'partner' | 'divorced' | 'separated';
+  start_date?: string;
+  end_date?: string;
+  marriage_place?: string;
+  relationship_notes?: string;
 }
 
 export interface AddParentData {

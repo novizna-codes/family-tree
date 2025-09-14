@@ -134,7 +134,7 @@ export class PrintService {
     pdf: jsPDF,
     tree: FamilyTree,
     people: Person[],
-    options: PrintOptions
+    _options: PrintOptions
   ): void {
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
@@ -166,8 +166,8 @@ export class PrintService {
       `Total Family Members: ${people.length}`,
       `Living Members: ${people.filter(p => p.is_living).length}`,
       `Deceased Members: ${people.filter(p => !p.is_living).length}`,
-      `Male Members: ${people.filter(p => p.gender === 'male').length}`,
-      `Female Members: ${people.filter(p => p.gender === 'female').length}`,
+      `Male Members: ${people.filter(p => p.gender === 'M').length}`,
+      `Female Members: ${people.filter(p => p.gender === 'F').length}`,
     ];
     
     stats.forEach((stat, index) => {
@@ -206,7 +206,7 @@ export class PrintService {
       // Person name
       pdf.setFontSize(12);
       pdf.setFont('helvetica', 'bold');
-      const fullName = `${person.first_name} ${person.middle_name || ''} ${person.last_name || ''}`.trim();
+      const fullName = `${person.first_name} ${person.last_name || ''}`.trim();
       pdf.text(`${index + 1}. ${fullName}`, 20, yPosition);
       yPosition += 8;
       
@@ -219,7 +219,6 @@ export class PrintService {
       if (person.birth_date) details.push(`Born: ${new Date(person.birth_date).toLocaleDateString()}`);
       if (person.birth_place) details.push(`Birth Place: ${person.birth_place}`);
       if (person.death_date) details.push(`Died: ${new Date(person.death_date).toLocaleDateString()}`);
-      if (person.occupation) details.push(`Occupation: ${person.occupation}`);
       details.push(`Status: ${person.is_living ? 'Living' : 'Deceased'}`);
       
       details.forEach(detail => {

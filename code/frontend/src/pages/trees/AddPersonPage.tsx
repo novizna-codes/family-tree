@@ -4,7 +4,6 @@ import { useFamilyTreeStore } from '@/store/familyTreeStore';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { CreatePersonData } from '@/services/familyTreeService';
-import type { Person } from '@/types';
 
 export const AddPersonPage: React.FC = () => {
   const { id: treeId } = useParams<{ id: string }>();

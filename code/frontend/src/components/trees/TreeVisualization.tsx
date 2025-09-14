@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import type { Person } from '@/types';
 
@@ -48,7 +48,7 @@ export function TreeVisualization({ people, onPersonClick, className = '' }: Tre
     svg.call(zoom);
 
     // Draw links (connections between people)
-    const links = g.selectAll('.link')
+    g.selectAll('.link')
       .data(treeData.links())
       .enter()
       .append('path')
@@ -153,7 +153,7 @@ export function TreeVisualization({ people, onPersonClick, className = '' }: Tre
           onClick={() => {
             const svg = d3.select(svgRef.current);
             svg.transition().duration(300).call(
-              d3.zoom<SVGSVGElement, unknown>().transform,
+              d3.zoom<SVGSVGElement, unknown>().transform as any,
               d3.zoomIdentity.scale(1)
             );
           }}
@@ -188,7 +188,27 @@ export function TreeVisualization({ people, onPersonClick, className = '' }: Tre
 // Helper function to create hierarchy from flat array of people
 function createHierarchy(people: Person[]): Person & { children?: Person[] } {
   if (people.length === 0) {
-    return { id: '', first_name: 'Empty', children: [] } as Person & { children?: Person[] };
+    return { 
+      id: '', 
+      family_tree_id: '',
+      first_name: 'Empty', 
+      last_name: null,
+      maiden_name: null,
+      nickname: null,
+      gender: null,
+      birth_date: null,
+      death_date: null,
+      birth_place: null,
+      death_place: null,
+      is_living: true,
+      father_id: null,
+      mother_id: null,
+      photo_path: null,
+      notes: null,
+      created_at: '',
+      updated_at: '',
+      children: [] 
+    } as Person & { children?: Person[] };
   }
 
   // Create a map for quick lookup

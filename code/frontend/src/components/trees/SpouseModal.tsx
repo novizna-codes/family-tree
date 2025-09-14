@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { CreateSpouseData, LinkSpouseData, Person } from '../../services/familyTreeService';
+import type { CreateSpouseData, LinkSpouseData, Person } from '../../services/familyTreeService';
 
 interface SpouseModalProps {
   isOpen: boolean;

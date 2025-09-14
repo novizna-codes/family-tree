@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeftIcon, UserPlusIcon, PresentationChartLineIcon, ListBulletIcon, HeartIcon } from '@heroicons/react/24/outline';
@@ -203,7 +203,7 @@ export function TreeVisualizationPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <h4 className="text-sm font-medium text-gray-900">
-                            {person.first_name} {person.middle_name} {person.last_name}
+                            {person.first_name} {person.last_name}
                           </h4>
                           <div className="mt-1 text-sm text-gray-600">
                             {person.birth_date && (
@@ -212,16 +212,13 @@ export function TreeVisualizationPage() {
                             {person.birth_place && (
                               <span> • {person.birth_place}</span>
                             )}
-                            {person.occupation && (
-                              <span> • {person.occupation}</span>
-                            )}
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            person.gender === 'male'
+                            person.gender === 'M'
                               ? 'bg-blue-100 text-blue-800'
-                              : person.gender === 'female'
+                              : person.gender === 'F'
                               ? 'bg-pink-100 text-pink-800'
                               : 'bg-gray-100 text-gray-800'
                           }`}>
@@ -266,7 +263,7 @@ export function TreeVisualizationPage() {
                 <div>
                   <span className="font-medium text-gray-700">Full Name:</span>
                   <span className="ml-2 text-gray-900">
-                    {selectedPerson.first_name} {selectedPerson.middle_name} {selectedPerson.last_name}
+                    {selectedPerson.first_name} {selectedPerson.last_name}
                   </span>
                 </div>
                 
@@ -295,13 +292,6 @@ export function TreeVisualizationPage() {
                   <div>
                     <span className="font-medium text-gray-700">Birth Place:</span>
                     <span className="ml-2 text-gray-900">{selectedPerson.birth_place}</span>
-                  </div>
-                )}
-                
-                {selectedPerson.occupation && (
-                  <div>
-                    <span className="font-medium text-gray-700">Occupation:</span>
-                    <span className="ml-2 text-gray-900">{selectedPerson.occupation}</span>
                   </div>
                 )}
                 

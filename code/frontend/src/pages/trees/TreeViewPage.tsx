@@ -277,7 +277,7 @@ export const TreeViewPage: React.FC = () => {
                           onClick={(e) => handlePersonClick(person, e)}
                         >
                           <h4 className="text-sm font-medium text-gray-900">
-                            {person.first_name} {person.middle_name} {person.last_name}
+                            {person.first_name} {person.last_name}
                           </h4>
                           <div className="mt-1 text-sm text-gray-600">
                             {person.birth_date && (
@@ -285,9 +285,6 @@ export const TreeViewPage: React.FC = () => {
                             )}
                             {person.birth_place && (
                               <span> • {person.birth_place}</span>
-                            )}
-                            {person.occupation && (
-                              <span> • {person.occupation}</span>
                             )}
                           </div>
                         </div>
@@ -364,7 +361,7 @@ export const TreeViewPage: React.FC = () => {
                 <div>
                   <span className="font-medium text-gray-700">Full Name:</span>
                   <span className="ml-2 text-gray-900">
-                    {selectedPerson.first_name} {selectedPerson.middle_name} {selectedPerson.last_name}
+                    {selectedPerson.first_name} {selectedPerson.last_name}
                   </span>
                 </div>
                 
@@ -395,13 +392,6 @@ export const TreeViewPage: React.FC = () => {
                   <div>
                     <span className="font-medium text-gray-700">Birth Place:</span>
                     <span className="ml-2 text-gray-900">{selectedPerson.birth_place}</span>
-                  </div>
-                )}
-                
-                {selectedPerson.occupation && (
-                  <div>
-                    <span className="font-medium text-gray-700">Occupation:</span>
-                    <span className="ml-2 text-gray-900">{selectedPerson.occupation}</span>
                   </div>
                 )}
                 
