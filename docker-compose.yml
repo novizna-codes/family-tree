@@ -1,0 +1,134 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: family-tree-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: family_tree
+      MYSQL_USER: family_tree_user
+      MYSQL_PASSWORD: family_tree_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - family-tree-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Laravel Backend
+  backend:
+    build:
+      context: ./code/backend
+      target: development
+    container_name: family-tree-backend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - APP_NAME=Family Tree Builder
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - APP_URL=http://localhost:8080
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=family_tree
+      - DB_USERNAME=family_tree_user
+      - DB_PASSWORD=family_tree_password
+      - SANCTUM_STATEFUL_DOMAINS=localhost:3000,localhost:5173
+    volumes:
+      - ./code/backend:/var/www/html
+      - backend_storage:/var/www/html/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - family-tree-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/health"]
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./code/frontend
+      target: development
+    container_name: family-tree-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8080/api
+      - VITE_APP_NAME=Family Tree Builder
+    volumes:
+      - ./code/frontend:/app
+      - /app/node_modules
+    networks:
+      - family-tree-network
+    depends_on:
+      - backend
+
+  # Redis (for caching and sessions)
+  redis:
+    image: redis:7-alpine
+    container_name: family-tree-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - family-tree-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 5s
+      retries: 5
+
+  # phpMyAdmin (for database management)
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: family-tree-phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: db
+      PMA_USER: family_tree_user
+      PMA_PASSWORD: family_tree_password
+    depends_on:
+      - db
+    networks:
+      - family-tree-network
+
+  # Mailhog (for email testing)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: family-tree-mailhog
+    restart: unless-stopped
+    ports:
+      - "8025:8025"  # Web UI
+      - "1025:1025"  # SMTP
+    networks:
+      - family-tree-network
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_storage:
+    driver: local
+
+networks:
+  family-tree-network:
+    driver: bridge
