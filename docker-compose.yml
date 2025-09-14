@@ -26,7 +26,7 @@ services:
   # Laravel Backend
   backend:
     build:
-      context: ./code/backend
+      context: ./backend
       target: development
     container_name: family-tree-backend
     restart: unless-stopped
@@ -45,7 +45,7 @@ services:
       - DB_PASSWORD=family_tree_password
       - SANCTUM_STATEFUL_DOMAINS=localhost:3000,localhost:5173
     volumes:
-      - ./code/backend:/var/www/html
+      - ./backend:/var/www/html
       - backend_storage:/var/www/html/storage
     depends_on:
       db:
@@ -61,7 +61,7 @@ services:
   # React Frontend
   frontend:
     build:
-      context: ./code/frontend
+      context: ./frontend
       target: development
     container_name: family-tree-frontend
     restart: unless-stopped
@@ -71,7 +71,7 @@ services:
       - VITE_API_URL=http://localhost:8080/api
       - VITE_APP_NAME=Family Tree Builder
     volumes:
-      - ./code/frontend:/app
+      - ./frontend:/app
       - /app/node_modules
     networks:
       - family-tree-network
