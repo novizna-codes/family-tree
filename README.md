@@ -2,6 +2,8 @@
 
 A comprehensive web application for creating, managing, and visualizing family trees with multi-generational relationships, user authentication, and print capabilities.
 
+[![Docker Build](https://github.com/novizna-codes/family-tree/actions/workflows/docker-build.yml/badge.svg)](https://github.com/novizna-codes/family-tree/actions/workflows/docker-build.yml)
+
 ## 🚀 Features
 
 ### ✅ **Implemented (85% Complete)**
