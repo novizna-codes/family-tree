@@ -1,0 +1,63 @@
+# Laravel specific
+vendor/
+node_modules/
+.env
+.env.local
+.env.*.local
+storage/app/*
+!storage/app/.gitkeep
+storage/framework/cache/*
+!storage/framework/cache/.gitkeep
+storage/framework/sessions/*
+!storage/framework/sessions/.gitkeep
+storage/framework/views/*
+!storage/framework/views/.gitkeep
+storage/logs/*
+!storage/logs/.gitkeep
+bootstrap/cache/*
+!bootstrap/cache/.gitkeep
+public/storage
+public/hot
+public/build
+.phpunit.result.cache
+
+# Development files
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.fleet/
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+README.md
+*.md
+docs/
+
+# Testing
+tests/
+phpunit.xml

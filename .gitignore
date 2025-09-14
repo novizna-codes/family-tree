@@ -1,0 +1,113 @@
+# Laravel Backend Ignores
+code/backend/vendor/
+code/backend/node_modules/
+code/backend/.env
+code/backend/.env.local
+code/backend/.env.*.local
+code/backend/storage/app/*
+!code/backend/storage/app/.gitkeep
+code/backend/storage/framework/cache/*
+!code/backend/storage/framework/cache/.gitkeep
+code/backend/storage/framework/sessions/*
+!code/backend/storage/framework/sessions/.gitkeep
+code/backend/storage/framework/views/*
+!code/backend/storage/framework/views/.gitkeep
+code/backend/storage/logs/*
+!code/backend/storage/logs/.gitkeep
+code/backend/bootstrap/cache/*
+!code/backend/bootstrap/cache/.gitkeep
+code/backend/public/storage
+code/backend/public/hot
+code/backend/public/build
+code/backend/.phpunit.result.cache
+code/backend/Homestead.json
+code/backend/Homestead.yaml
+code/backend/npm-debug.log
+code/backend/yarn-error.log
+code/backend/.fleet
+code/backend/.idea
+code/backend/.vscode
+
+# React Frontend Ignores
+code/frontend/node_modules/
+code/frontend/dist/
+code/frontend/build/
+code/frontend/.env
+code/frontend/.env.local
+code/frontend/.env.development.local
+code/frontend/.env.test.local
+code/frontend/.env.production.local
+code/frontend/.vite
+code/frontend/.DS_Store
+code/frontend/npm-debug.log*
+code/frontend/yarn-debug.log*
+code/frontend/yarn-error.log*
+code/frontend/pnpm-debug.log*
+code/frontend/lerna-debug.log*
+code/frontend/.vscode/settings.json
+code/frontend/.vscode/launch.json
+code/frontend/.idea/
+
+# General Development Files
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.fleet/
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary Files
+*.tmp
+*.temp
+*.pid
+*.seed
+*.pid.lock
+
+# Database Files
+*.sqlite
+*.sqlite3
+*.db
+
+# Test Coverage
+coverage/
+.nyc_output/
+lcov.info
+
+# Documentation Build
+docs/build/
+
+# Backup Files
+*.backup
+*.bak
+*.old
+
+# Archive Files
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Package Manager Locks (keep for consistency)
+# Note: You may want to uncomment these if you prefer not to version lock files
+# code/backend/composer.lock
+# code/frontend/package-lock.json
+# code/frontend/yarn.lock
+# code/frontend/pnpm-lock.yaml
