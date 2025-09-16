@@ -1,5 +1,7 @@
+import { config } from '../config';
+
 class ApiService {
-  private baseURL = import.meta.env.VITE_API_URL || '/api';
+  private baseURL = config.API_URL + '/api';
   private token: string | null = null;
 
   setToken(token: string | null) {
@@ -8,8 +10,7 @@ class ApiService {
 
   async initializeCSRF() {
     // Get CSRF cookie for SPA authentication
-    const baseURL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://familytree.test';
-    await fetch(`${baseURL}/sanctum/csrf-cookie`, {
+    await fetch(`${config.API_URL}/sanctum/csrf-cookie`, {
       credentials: 'include',
     });
   }

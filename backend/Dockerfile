@@ -1,7 +1,7 @@
 # Multi-stage build for Laravel Backend
 FROM php:8.2-fpm-alpine AS base
 
-# Install system dependencies
+# Install system dependencies and PHP extensions in one layer
 RUN apk add --no-cache \
     git \
     curl \
@@ -11,41 +11,59 @@ RUN apk add --no-cache \
     unzip \
     mysql-client \
     nginx \
-    supervisor
+    supervisor \
+    oniguruma-dev \
+    libzip-dev \
+    freetype-dev \
+    libjpeg-turbo-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+        pdo \
+        pdo_mysql \
+        mysqli \
+        pcntl \
+        gd \
+        xml \
+        zip \
+        mbstring \
+        bcmath \
+    && apk del --no-cache \
+        libpng-dev \
+        libxml2-dev \
+        oniguruma-dev \
+        libzip-dev \
+        freetype-dev \
+        libjpeg-turbo-dev
 
-# Install PHP extensions
-RUN docker-php-ext-install pdo pdo_mysql mysqli pcntl gd xml
+# Install Composer with verification
+COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Create app user for security
+RUN addgroup -g 1000 -S appgroup && \
+    adduser -u 1000 -S appuser -G appgroup
 
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy composer files
-COPY composer.json composer.lock ./
-
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-scripts --no-plugins
+# Copy composer files first for better layer caching
+COPY --chown=appuser:appgroup composer.json composer.lock ./
 
 # Development stage
 FROM base AS development
 
-# Install development dependencies
-RUN composer install --optimize-autoloader
+# Install all dependencies including dev
+RUN composer install --optimize-autoloader --no-progress --no-interaction
 
 # Copy application code
-COPY . .
+COPY --chown=appuser:appgroup . .
 
 # Set permissions
-RUN chown -R www-data:www-data /var/www/html \
+RUN chown -R appuser:appgroup /var/www/html \
     && chmod -R 755 /var/www/html/storage \
     && chmod -R 755 /var/www/html/bootstrap/cache
 
-# Copy nginx configuration
+# Copy configurations
 COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
-
-# Copy supervisor configuration
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Expose port
@@ -57,27 +75,43 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 # Production stage
 FROM base AS production
 
+# Install production dependencies only
+RUN composer install --no-dev --optimize-autoloader --no-progress --no-interaction --no-scripts
+
 # Copy application code
-COPY . .
+COPY --chown=appuser:appgroup . .
 
-# Generate optimized autoloader
-RUN composer dump-autoload --optimize
-
-# Cache configuration and routes
-RUN php artisan config:cache \
-    && php artisan route:cache \
-    && php artisan view:cache
-
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html \
+# Create required directories and set permissions
+RUN mkdir -p /var/www/html/storage/framework/{cache,sessions,views} \
+    && mkdir -p /var/www/html/storage/logs \
+    && mkdir -p /var/www/html/bootstrap/cache \
+    && chown -R appuser:appgroup /var/www/html \
     && chmod -R 755 /var/www/html/storage \
     && chmod -R 755 /var/www/html/bootstrap/cache
 
-# Copy nginx configuration
-COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
+# Generate optimized autoloader and cache configs
+RUN composer dump-autoload --optimize \
+    && php artisan config:cache \
+    && php artisan route:cache \
+    && php artisan view:cache \
+    && php artisan event:cache
 
-# Copy supervisor configuration
+# Copy configurations
+COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost/api/health || exit 1
+
+# Labels for better image management
+LABEL org.opencontainers.image.title="Family Tree Backend" \
+      org.opencontainers.image.description="Laravel backend for Family Tree Builder" \
+      org.opencontainers.image.vendor="Novizna" \
+      org.opencontainers.image.source="https://github.com/novizna-codes/family-tree"
+
+# Switch to non-root user
+USER appuser
 
 # Expose port
 EXPOSE 80

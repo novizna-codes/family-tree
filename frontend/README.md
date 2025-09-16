@@ -1,69 +1,90 @@
-# React + TypeScript + Vite
+# Family Tree Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React-based frontend for the Family Tree Builder application.
 
-Currently, two official plugins are available:
+## Configuration
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+The frontend is built as a production-ready Docker image that can be configured at runtime using environment variables.
 
-## Expanding the ESLint configuration
+### Environment Variables
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_API_URL` | Backend API URL | `http://localhost:8000` |
+| `VITE_APP_NAME` | Application name | `Family Tree Builder` |
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Usage with Docker
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+#### Using pre-built image:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+docker run -p 3000:80 \
+  -e VITE_API_URL=http://your-backend:8000 \
+  -e VITE_APP_NAME="My Family Tree" \
+  ghcr.io/your-username/family-tree-frontend:latest
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+#### Using Docker Compose:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```yaml
+services:
+  frontend:
+    image: ghcr.io/your-username/family-tree-frontend:latest
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://your-backend:8000
+      - VITE_APP_NAME=My Family Tree
 ```
+
+#### Building locally:
+
+```bash
+# Build the image
+docker build -t family-tree-frontend .
+
+# Run with custom configuration
+docker run -p 3000:80 \
+  -e VITE_API_URL=http://localhost:8080 \
+  family-tree-frontend
+```
+
+## Development
+
+For development, use the development setup in the parent directory:
+
+```bash
+cd ..
+docker-compose up frontend
+```
+
+This will run the frontend in production mode. For local development with hot reloading, run:
+
+```bash
+npm install
+npm run dev
+```
+
+## Building
+
+The Dockerfile creates a production-optimized build using:
+- Multi-stage build to reduce image size
+- Nginx for efficient static file serving
+- Runtime configuration injection
+- Security hardening with non-root user
+
+## Runtime Configuration
+
+The application supports runtime configuration by:
+1. Environment variables are injected into `/usr/share/nginx/html/config.js` at container startup
+2. The React app loads this configuration file before starting
+3. No rebuild required when changing backend URLs or app names
+
+## Technology Stack
+
+This frontend is built with:
+- **React 18** with TypeScript
+- **Vite** for fast development and building
+- **Tailwind CSS** for styling
+- **React Router** for navigation
+- **ESLint** for code quality

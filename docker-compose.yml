@@ -58,21 +58,17 @@ services:
       retries: 5
       start_period: 30s
 
-  # React Frontend
+  # React Frontend (runs in development mode)
   frontend:
     build:
       context: ./frontend
-      target: development
     container_name: family-tree-frontend
     restart: unless-stopped
     ports:
-      - "3000:5173"
+      - "3000:80"
     environment:
-      - VITE_API_URL=http://localhost:8080/api
+      - VITE_API_URL=http://localhost:8080
       - VITE_APP_NAME=Family Tree Builder
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     networks:
       - family-tree-network
     depends_on:

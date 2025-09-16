@@ -6,6 +6,16 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FamilyTreeController;
 use App\Http\Controllers\Api\PersonController;
 
+// Health check endpoint for Docker
+Route::get('/health', function () {
+    return response()->json([
+        'status' => 'healthy',
+        'timestamp' => now()->toISOString(),
+        'service' => 'family-tree-backend',
+        'version' => config('app.version', '1.0.0'),
+    ]);
+});
+
 // Authentication routes
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/login', [AuthController::class, 'login']);
