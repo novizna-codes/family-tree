@@ -1,11 +1,21 @@
 name: Build and Push Docker Images to GHCR
 
 on:
-  push:
-    branches: [ main, develop ]
-    tags: [ 'v*' ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+      push_images:
+        description: 'Push images to registry'
+        required: true
+        default: true
+        type: boolean
 
 env:
   REGISTRY: ghcr.io
@@ -32,7 +42,7 @@ jobs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ secrets.GHCR_TOKEN }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Extract metadata for Backend
       id: meta-backend
@@ -57,7 +67,7 @@ jobs:
         context: ./backend
         target: production
         platforms: linux/amd64,linux/arm64
-        push: true
+        push: ${{ inputs.push_images }}
         tags: ${{ steps.meta-backend.outputs.tags }}
         labels: ${{ steps.meta-backend.outputs.labels }}
         cache-from: type=gha
@@ -88,7 +98,7 @@ jobs:
         context: ./frontend
         target: production
         platforms: linux/amd64,linux/arm64
-        push: true
+        push: ${{ inputs.push_images }}
         tags: ${{ steps.meta-frontend.outputs.tags }}
         labels: ${{ steps.meta-frontend.outputs.labels }}
         cache-from: type=gha
