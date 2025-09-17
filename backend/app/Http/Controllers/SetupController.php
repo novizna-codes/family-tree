@@ -45,6 +45,9 @@ class SetupController extends Controller
         // Assign admin role using enum
         $admin->assignRoleEnum(RoleEnum::ADMIN);
 
+        // Load roles for response
+        $admin->load('roles');
+
         $token = $admin->createToken('auth_token')->plainTextToken;
 
         return response()->json([
