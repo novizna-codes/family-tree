@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useFamilyTreeStore } from '@/store/familyTreeStore';
 import { Button } from '@/components/ui/Button';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { TreeList } from '@/components/trees/TreeList';
 import { CreateTreeModal } from '@/components/trees/CreateTreeModal';
+import { isAdmin } from '@/types';
 
 export const DashboardPage: React.FC = () => {
   const { t } = useTranslation();
@@ -49,6 +51,14 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="flex items-center space-x-4">
               <LanguageSwitcher />
+              {isAdmin(user) && (
+                <Link 
+                  to="/admin"
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  Admin Panel
+                </Link>
+              )}
               <span className="text-sm text-gray-700">
                 {t('common.name')}: {user?.name}
               </span>

@@ -12,6 +12,7 @@ interface AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
+  setUser: (user: User) => void;
   updateUser: (user: Partial<User>) => void;
   checkAuth: () => Promise<void>;
 }
@@ -52,6 +53,10 @@ export const useAuthStore = create<AuthState>()(
         authService.logout().catch(console.error);
         api.setToken(null);
         set({ user: null, token: null, isAuthenticated: false });
+      },
+
+      setUser: (user) => {
+        set({ user, isAuthenticated: true });
       },
 
       updateUser: (updates) => {

@@ -1,14 +1,42 @@
 // User types
+export interface Role {
+  id: number;
+  name: string;
+  guard_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Permission {
+  id: number;
+  name: string;
+  guard_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface User {
   id: number;
   name: string;
   email: string;
   email_verified_at: string | null;
+  roles: Role[];
+  permissions?: Permission[];
   preferred_language: 'en' | 'ur';
   timezone: string;
   date_format: string;
   created_at: string;
   updated_at: string;
+}
+
+// Helper function to check if user has a role
+export function userHasRole(user: User | null, roleName: string): boolean {
+  return user?.roles?.some(role => role.name === roleName) ?? false;
+}
+
+// Helper function to check if user is admin
+export function isAdmin(user: User | null): boolean {
+  return userHasRole(user, 'admin');
 }
 
 // Authentication types
@@ -157,4 +185,44 @@ export interface PaginatedResponse<T> {
     per_page: number;
     total: number;
   };
+}
+
+// Admin types
+export interface SystemSetting {
+  id: number;
+  key: string;
+  value: string;
+  type: 'string' | 'boolean' | 'integer' | 'float' | 'json';
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminDashboardStats {
+  total_users: number;
+  total_admins: number;
+  total_trees: number;
+  total_persons: number;
+  users_last_month: number;
+  trees_last_month: number;
+}
+
+export interface AdminDashboardData {
+  stats: AdminDashboardStats;
+  recent_users: User[];
+  recent_trees: FamilyTree[];
+  user_registrations: Array<{
+    date: string;
+    count: number;
+  }>;
+}
+
+export interface UserFormData {
+  name: string;
+  email: string;
+  password?: string;
+  role: string;
+  preferred_language?: 'en' | 'ur';
+  timezone?: string;
+  date_format?: string;
 }

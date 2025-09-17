@@ -26,6 +26,7 @@ class Person extends Model
         'mother_id',
         'photo_path',
         'notes',
+        'is_deceased',
     ];
 
     protected $appends = [
@@ -103,7 +104,7 @@ class Person extends Model
         $spouseIds = $relationships->map(function ($rel) {
             return $rel->person1_id === $this->id ? $rel->person2_id : $rel->person1_id;
         });
-        
+
         return Person::whereIn('id', $spouseIds);
     }
 
@@ -124,6 +125,6 @@ class Person extends Model
 
     public function getIsLivingAttribute(): bool
     {
-        return $this->death_date === null;
+        return $this->is_deceased === false;
     }
 }

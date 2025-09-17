@@ -57,6 +57,10 @@ RUN composer install --optimize-autoloader --no-progress --no-interaction
 # Copy application code
 COPY --chown=appuser:appgroup . .
 
+# Copy and make entrypoint executable
+COPY --chown=appuser:appgroup docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Set permissions
 RUN chown -R appuser:appgroup /var/www/html \
     && chmod -R 755 /var/www/html/storage \
@@ -69,8 +73,8 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Expose port
 EXPOSE 80
 
-# Start supervisor
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Start with entrypoint
+CMD ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Production stage
 FROM base AS production
@@ -80,6 +84,10 @@ RUN composer install --no-dev --optimize-autoloader --no-progress --no-interacti
 
 # Copy application code
 COPY --chown=appuser:appgroup . .
+
+# Copy and make entrypoint executable
+COPY --chown=appuser:appgroup docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create required directories and set permissions
 RUN mkdir -p /var/www/html/storage/framework/{cache,sessions,views} \
@@ -116,5 +124,5 @@ USER appuser
 # Expose port
 EXPOSE 80
 
-# Start supervisor
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Start with entrypoint
+CMD ["/usr/local/bin/docker-entrypoint.sh"]

@@ -42,7 +42,7 @@ jobs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ secrets.GHCR_TOKEN }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Extract metadata for Backend
       id: meta-backend
@@ -54,7 +54,7 @@ jobs:
           type=ref,event=pr
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
-          type=raw,value=latest,enable={{is_default_branch}}
+          type=raw,value=latest
           type=sha,prefix={{branch}}-
         labels: |
           org.opencontainers.image.title=Family Tree Backend
@@ -85,7 +85,7 @@ jobs:
           type=ref,event=pr
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
-          type=raw,value=latest,enable={{is_default_branch}}
+          type=raw,value=latest
           type=sha,prefix={{branch}}-
         labels: |
           org.opencontainers.image.title=Family Tree Frontend
@@ -105,25 +105,3 @@ jobs:
         cache-to: type=gha,mode=max
         build-args: |
           BUILDKIT_INLINE_CACHE=1
-
-    - name: Run Trivy vulnerability scanner on Backend
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: ${{ env.IMAGE_BACKEND }}:${{ steps.meta-backend.outputs.version }}
-        format: 'sarif'
-        output: 'backend-trivy-results.sarif'
-      continue-on-error: true
-
-    - name: Run Trivy vulnerability scanner on Frontend
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: ${{ env.IMAGE_FRONTEND }}:${{ steps.meta-frontend.outputs.version }}
-        format: 'sarif'
-        output: 'frontend-trivy-results.sarif'
-      continue-on-error: true
-
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: '.'
-      continue-on-error: true

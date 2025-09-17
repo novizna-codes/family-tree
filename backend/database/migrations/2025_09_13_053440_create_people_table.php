@@ -20,6 +20,7 @@ return new class extends Migration
             $table->string('nickname')->nullable();
             $table->enum('gender', ['M', 'F', 'O'])->nullable();
             $table->date('birth_date')->nullable();
+            $table->boolean('is_deceased')->default(false);
             $table->date('death_date')->nullable();
             $table->string('birth_place')->nullable();
             $table->string('death_place')->nullable();
@@ -29,10 +30,10 @@ return new class extends Migration
             $table->text('notes')->nullable();
             $table->timestamps();
             $table->softDeletes();
-            
+
             $table->foreign('father_id')->references('id')->on('people')->onDelete('set null');
             $table->foreign('mother_id')->references('id')->on('people')->onDelete('set null');
-            
+
             $table->index(['family_tree_id', 'first_name']);
             $table->index(['father_id']);
             $table->index(['mother_id']);

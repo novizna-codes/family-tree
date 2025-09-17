@@ -50,8 +50,6 @@ class PersonController extends Controller
                 $validated['death_date'] = null;
                 $validated['death_place'] = null;
             }
-            // Remove is_deceased as it's not a database field
-            unset($validated['is_deceased']);
         }
 
         $person = $familyTree->people()->create($validated);
@@ -114,8 +112,6 @@ class PersonController extends Controller
                 $validated['death_date'] = null;
                 $validated['death_place'] = null;
             }
-            // Remove is_deceased as it's not a database field
-            unset($validated['is_deceased']);
         }
 
         $person->update($validated);
@@ -158,16 +154,15 @@ class PersonController extends Controller
 
         $parentData = $validated;
         unset($parentData['parent_type']);
-        
+
         // Handle is_deceased logic
         if (isset($parentData['is_deceased'])) {
             if (!$parentData['is_deceased']) {
                 $parentData['death_date'] = null;
                 $parentData['death_place'] = null;
             }
-            unset($parentData['is_deceased']);
         }
-        
+
         $parentData['family_tree_id'] = $familyTree->id;
 
         $parent = Person::create($parentData);
@@ -197,16 +192,15 @@ class PersonController extends Controller
         ]);
 
         $childData = $validated;
-        
+
         // Handle is_deceased logic
         if (isset($childData['is_deceased'])) {
             if (!$childData['is_deceased']) {
                 $childData['death_date'] = null;
                 $childData['death_place'] = null;
             }
-            unset($childData['is_deceased']);
         }
-        
+
         $childData['family_tree_id'] = $familyTree->id;
 
         if ($person->gender === 'M') {
@@ -233,7 +227,7 @@ class PersonController extends Controller
         ]);
 
         $parent = Person::findOrFail($request->parent_id);
-        
+
         // Ensure parent belongs to same family tree
         if ($parent->family_tree_id !== $familyTree->id) {
             return response()->json([
@@ -261,7 +255,7 @@ class PersonController extends Controller
         ]);
 
         $child = Person::findOrFail($request->child_id);
-        
+
         // Ensure child belongs to same family tree
         if ($child->family_tree_id !== $familyTree->id) {
             return response()->json([
@@ -316,14 +310,13 @@ class PersonController extends Controller
                 $validated['death_date'] = null;
                 $validated['death_place'] = null;
             }
-            unset($validated['is_deceased']);
         }
 
         // Extract person data (remove relationship fields)
         $spouseData = collect($validated)->except([
             'relationship_type', 'start_date', 'end_date', 'marriage_place', 'relationship_notes'
         ])->toArray();
-        
+
         // Create the spouse
         $spouse = $familyTree->people()->create($spouseData);
 
@@ -358,7 +351,7 @@ class PersonController extends Controller
         ]);
 
         $spouse = Person::findOrFail($validated['spouse_id']);
-        
+
         // Ensure spouse belongs to same family tree
         if ($spouse->family_tree_id !== $familyTree->id) {
             return response()->json([
