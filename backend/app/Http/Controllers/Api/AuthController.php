@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\SystemSetting;
+use App\Enums\RoleEnum;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -13,6 +15,12 @@ class AuthController extends Controller
 {
     public function register(Request $request)
     {
+        if (!SystemSetting::get('public_registration_enabled', true)) {
+            return response()->json([
+                'message' => 'Public registration is currently disabled.',
+            ], 403);
+        }
+
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
@@ -27,7 +35,13 @@ class AuthController extends Controller
             'preferred_language' => $request->preferred_language ?? 'en',
         ]);
 
+        // Assign default user role
+        $user->assignRoleEnum(RoleEnum::USER);
+
         $token = $user->createToken('auth_token')->plainTextToken;
+
+        // Load roles for response
+        $user->load('roles');
 
         return response()->json([
             'data' => [
@@ -51,7 +65,7 @@ class AuthController extends Controller
             ]);
         }
 
-        $user = User::where('email', $request->email)->first();
+        $user = User::with('roles')->where('email', $request->email)->first();
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
@@ -74,8 +88,10 @@ class AuthController extends Controller
 
     public function user(Request $request)
     {
+        $user = $request->user()->load('roles');
+        
         return response()->json([
-            'data' => $request->user(),
+            'data' => $user,
         ]);
     }
 

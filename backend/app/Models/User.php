@@ -6,10 +6,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
+use App\Enums\RoleEnum;
+use App\Enums\PermissionEnum;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasApiTokens;
+    use HasFactory, Notifiable, HasApiTokens, HasRoles;
 
     protected $fillable = [
         'name',
@@ -36,5 +39,32 @@ class User extends Authenticatable
     public function familyTrees()
     {
         return $this->hasMany(FamilyTree::class);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->hasRole(RoleEnum::ADMIN->value);
+    }
+
+    public function hasRoleEnum(RoleEnum $role): bool
+    {
+        return $this->hasRole($role->value);
+    }
+
+    public function hasPermissionEnum(PermissionEnum $permission): bool
+    {
+        return $this->hasPermissionTo($permission->value);
+    }
+
+    public function assignRoleEnum(RoleEnum $role): self
+    {
+        $this->assignRole($role->value);
+        return $this;
+    }
+
+    public function removeRoleEnum(RoleEnum $role): self
+    {
+        $this->removeRole($role->value);
+        return $this;
     }
 }
