@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
+import { Button, Select } from '../ui';
+import { PersonForm, RelationshipForm } from '../forms';
 import type { CreateSpouseData, LinkSpouseData, Person } from '../../services/familyTreeService';
+import type { PersonFormData } from '../../types';
 
 interface SpouseModalProps {
   isOpen: boolean;
@@ -93,11 +94,15 @@ export const SpouseModal: React.FC<SpouseModalProps> = ({
     });
   };
 
-  const updateFormData = (field: keyof CreateSpouseData, value: any) => {
+  const updateFormData = (field: keyof PersonFormData, value: string | boolean | undefined) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const updateLinkData = (field: keyof LinkSpouseData, value: any) => {
+  const updateRelationshipData = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const updateLinkData = (field: keyof LinkSpouseData, value: string) => {
     setLinkData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -137,185 +142,68 @@ export const SpouseModal: React.FC<SpouseModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === 'create' ? (
             <>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="First Name *"
-                  value={formData.first_name}
-                  onChange={(e) => updateFormData('first_name', e.target.value)}
-                  required
-                />
-                <Input
-                  label="Last Name"
-                  value={formData.last_name || ''}
-                  onChange={(e) => updateFormData('last_name', e.target.value)}
-                />
-              </div>
+              <PersonForm
+                formData={{
+                  first_name: formData.first_name,
+                  last_name: formData.last_name,
+                  maiden_name: formData.maiden_name,
+                  nickname: formData.nickname,
+                  gender: formData.gender,
+                  birth_date: formData.birth_date,
+                  death_date: formData.death_date,
+                  birth_place: formData.birth_place,
+                  death_place: formData.death_place,
+                  notes: formData.notes,
+                  is_deceased: formData.is_deceased,
+                }}
+                onChange={updateFormData}
+                disabled={isLoading}
+                showNotes={false}
+              />
 
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Maiden Name"
-                  value={formData.maiden_name || ''}
-                  onChange={(e) => updateFormData('maiden_name', e.target.value)}
-                />
-                <select
-                  value={formData.gender || ''}
-                  onChange={(e) => updateFormData('gender', e.target.value || undefined)}
-                  className="border border-gray-300 rounded px-3 py-2"
-                >
-                  <option value="">Gender</option>
-                  <option value="M">Male</option>
-                  <option value="F">Female</option>
-                  <option value="O">Other</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Birth Date"
-                  type="date"
-                  value={formData.birth_date || ''}
-                  onChange={(e) => updateFormData('birth_date', e.target.value)}
-                />
-                <Input
-                  label="Birth Place"
-                  value={formData.birth_place || ''}
-                  onChange={(e) => updateFormData('birth_place', e.target.value)}
-                />
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="is_deceased"
-                  checked={formData.is_deceased || false}
-                  onChange={(e) => updateFormData('is_deceased', e.target.checked)}
-                />
-                <label htmlFor="is_deceased">Deceased</label>
-              </div>
-
-              {formData.is_deceased && (
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Death Date"
-                    type="date"
-                    value={formData.death_date || ''}
-                    onChange={(e) => updateFormData('death_date', e.target.value)}
-                  />
-                  <Input
-                    label="Death Place"
-                    value={formData.death_place || ''}
-                    onChange={(e) => updateFormData('death_place', e.target.value)}
-                  />
-                </div>
-              )}
+              <RelationshipForm
+                formData={{
+                  relationship_type: formData.relationship_type,
+                  start_date: formData.start_date,
+                  end_date: formData.end_date,
+                  marriage_place: formData.marriage_place,
+                  relationship_notes: formData.relationship_notes,
+                }}
+                onChange={updateRelationshipData}
+                disabled={isLoading}
+              />
             </>
           ) : (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Select Person *
-              </label>
-              <select
+            <>
+              <Select
+                label="Select Person"
+                name="spouse_id"
                 value={linkData.spouse_id}
                 onChange={(e) => updateLinkData('spouse_id', e.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-2"
                 required
-              >
-                <option value="">Choose a person...</option>
-                {existingPeople.map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.first_name} {person.last_name}
-                  </option>
-                ))}
-              </select>
-            </div>
+                disabled={isLoading}
+                options={[
+                  { value: '', label: 'Choose a person...' },
+                  ...existingPeople.map((person) => ({
+                    value: person.id,
+                    label: `${person.first_name} ${person.last_name}`
+                  }))
+                ]}
+              />
+
+              <RelationshipForm
+                formData={{
+                  relationship_type: linkData.relationship_type,
+                  start_date: linkData.start_date,
+                  end_date: linkData.end_date,
+                  marriage_place: linkData.marriage_place,
+                  notes: linkData.notes,
+                }}
+                onChange={(field, value) => updateLinkData(field as keyof LinkSpouseData, value)}
+                disabled={isLoading}
+              />
+            </>
           )}
-
-          <div className="border-t pt-4">
-            <h3 className="font-medium mb-3">Relationship Details</h3>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Relationship Type *
-                </label>
-                <select
-                  value={mode === 'create' ? formData.relationship_type : linkData.relationship_type}
-                  onChange={(e) => {
-                    const value = e.target.value as 'spouse' | 'partner' | 'divorced' | 'separated';
-                    if (mode === 'create') {
-                      updateFormData('relationship_type', value);
-                    } else {
-                      updateLinkData('relationship_type', value);
-                    }
-                  }}
-                  className="w-full border border-gray-300 rounded px-3 py-2"
-                  required
-                >
-                  <option value="spouse">Spouse</option>
-                  <option value="partner">Partner</option>
-                  <option value="divorced">Divorced</option>
-                  <option value="separated">Separated</option>
-                </select>
-              </div>
-
-              <Input
-                label="Marriage Place"
-                value={mode === 'create' ? formData.marriage_place || '' : linkData.marriage_place || ''}
-                onChange={(e) => {
-                  if (mode === 'create') {
-                    updateFormData('marriage_place', e.target.value);
-                  } else {
-                    updateLinkData('marriage_place', e.target.value);
-                  }
-                }}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Start Date"
-                type="date"
-                value={mode === 'create' ? formData.start_date || '' : linkData.start_date || ''}
-                onChange={(e) => {
-                  if (mode === 'create') {
-                    updateFormData('start_date', e.target.value);
-                  } else {
-                    updateLinkData('start_date', e.target.value);
-                  }
-                }}
-              />
-              <Input
-                label="End Date"
-                type="date"
-                value={mode === 'create' ? formData.end_date || '' : linkData.end_date || ''}
-                onChange={(e) => {
-                  if (mode === 'create') {
-                    updateFormData('end_date', e.target.value);
-                  } else {
-                    updateLinkData('end_date', e.target.value);
-                  }
-                }}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Notes
-              </label>
-              <textarea
-                value={mode === 'create' ? formData.relationship_notes || '' : linkData.notes || ''}
-                onChange={(e) => {
-                  if (mode === 'create') {
-                    updateFormData('relationship_notes', e.target.value);
-                  } else {
-                    updateLinkData('notes', e.target.value);
-                  }
-                }}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                rows={3}
-              />
-            </div>
-          </div>
 
           <div className="flex justify-end space-x-3">
             <Button

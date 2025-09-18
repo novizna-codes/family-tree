@@ -1,11 +1,17 @@
 import { api } from './api';
-import type { 
-  User, 
-  SystemSetting, 
-  AdminDashboardData, 
+import type {
+  User,
+  SystemSetting,
+  AdminDashboardData,
   UserFormData,
   PaginatedResponse,
 } from '../types';
+
+export interface RoleResponse {
+  id: number;
+  name: string;
+  value: string;
+}
 
 export const adminService = {
   // Dashboard
@@ -16,8 +22,8 @@ export const adminService = {
 
   // User Management
   getUsers: async (params?: {
-    search?: string;
-    role?: string;
+    search?: string | null;
+    role?: string | null;
     page?: number;
     per_page?: number;
   }): Promise<PaginatedResponse<User>> => {
@@ -62,4 +68,8 @@ export const adminService = {
     const response = await api.get<{ value: any }>(`/admin/settings/${key}`);
     return response.value;
   },
+  getRoles: async (): Promise<Array<RoleResponse>> => {
+    const response = await api.get<Array<RoleResponse>>('/admin/roles');
+    return response;
+  }
 };

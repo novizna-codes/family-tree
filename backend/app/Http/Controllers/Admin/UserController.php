@@ -16,7 +16,7 @@ class UserController extends Controller
     {
         $query = User::with('roles');
 
-        if ($request->filled('search')) {
+        if ($request->filled('search') && $request->get('search') !== 'null') {
             $search = $request->get('search');
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
@@ -24,7 +24,7 @@ class UserController extends Controller
             });
         }
 
-        if ($request->filled('role')) {
+        if ($request->filled('role') && $request->get('role') !== 'null') {
             $query->role($request->get('role'));
         }
 
@@ -111,8 +111,8 @@ class UserController extends Controller
 
     public function getRoles()
     {
-        return response()->json([
-            'data' => RoleEnum::toArray()
-        ]);
+        return response()->json(
+            RoleEnum::toArray()
+        );
     }
 }

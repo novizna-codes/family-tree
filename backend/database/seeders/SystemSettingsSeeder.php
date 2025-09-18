@@ -14,22 +14,10 @@ class SystemSettingsSeeder extends Seeder
     {
         $defaultSettings = [
             [
-                'key' => 'allow_public_registration',
-                'value' => true,
-                'type' => 'boolean',
-                'description' => 'Allow users to register accounts without admin approval'
-            ],
-            [
                 'key' => 'default_language',
                 'value' => 'en',
                 'type' => 'string',
                 'description' => 'Default language for new users and the application'
-            ],
-            [
-                'key' => 'site_name',
-                'value' => 'Family Tree Builder',
-                'type' => 'string',
-                'description' => 'Name of the application displayed to users'
             ],
             [
                 'key' => 'max_tree_size',

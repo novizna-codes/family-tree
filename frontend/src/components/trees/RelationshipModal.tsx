@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { XMarkIcon, UserPlusIcon } from '@heroicons/react/24/outline';
-import { Button } from '@/components/ui/Button';
+import { Button, Select } from '../ui';
+import { PersonForm, RelationshipForm } from '../forms';
 import { treeService } from '@/services/treeService';
 import toast from 'react-hot-toast';
-import type { Person } from '@/types';
+import type { Person, PersonFormData } from '@/types';
 
 interface RelationshipModalProps {
   isOpen: boolean;
@@ -19,13 +20,17 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
   const [activeTab, setActiveTab] = useState<RelationshipType>('parent');
   const [selectedPersonId, setSelectedPersonId] = useState<string>('');
   const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
-  const [newPersonData, setNewPersonData] = useState({
+  const [newPersonData, setNewPersonData] = useState<PersonFormData>({
     first_name: '',
     last_name: '',
-    gender: '' as 'M' | 'F' | 'O' | '',
+    maiden_name: '',
+    nickname: '',
+    gender: undefined,
     birth_date: '',
     death_date: '',
+    birth_place: '',
     death_place: '',
+    notes: '',
     is_deceased: false,
   });
   const [spouseData, setSpouseData] = useState({
@@ -44,15 +49,15 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
   });
 
   // Helper function to check if person2 is a descendant of person1
-  const isDescendant = (person1: any, person2: any): boolean => {
+  const isDescendant = (person1: Person, person2: Person): boolean => {
     if (!person1.children) return false;
-    return person1.children.some((child: any) =>
+    return person1.children.some((child: Person) =>
       child.id === person2.id || isDescendant(child, person2)
     );
   };
 
   // Helper function to check if person2 is an ancestor of person1
-  const isAncestor = (person1: any, person2: any): boolean => {
+  const isAncestor = (person1: Person, person2: Person): boolean => {
     return !!(person1.father_id === person2.id || person1.mother_id === person2.id) ||
            !!(person1.father && isAncestor(person1.father, person2)) ||
            !!(person1.mother && isAncestor(person1.mother, person2));
@@ -166,10 +171,14 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
     setNewPersonData({
       first_name: '',
       last_name: '',
-      gender: '',
+      maiden_name: '',
+      nickname: '',
+      gender: undefined,
       birth_date: '',
       death_date: '',
+      birth_place: '',
       death_place: '',
+      notes: '',
       is_deceased: false,
     });
     setSpouseData({
@@ -179,6 +188,26 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
       marriage_place: '',
       relationship_notes: '',
     });
+  };
+
+  const updatePersonData = (field: keyof PersonFormData, value: string | boolean | undefined) => {
+    setNewPersonData(prev => {
+      const updated = { ...prev, [field]: value };
+      // If death_date is cleared, also clear death_place
+      if (field === 'death_date' && !value) {
+        updated.death_place = '';
+      }
+      // If setting is_deceased to false, clear death fields
+      if (field === 'is_deceased' && !value) {
+        updated.death_date = '';
+        updated.death_place = '';
+      }
+      return updated;
+    });
+  };
+
+  const updateSpouseData = (field: string, value: string) => {
+    setSpouseData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleTabChange = (tab: RelationshipType) => {
@@ -273,297 +302,61 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
               {isCreatingNew ? (
                 // Form for creating new spouse
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      First Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={newPersonData.first_name}
-                      onChange={(e) => setNewPersonData(prev => ({ ...prev, first_name: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter first name"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      value={newPersonData.last_name}
-                      onChange={(e) => setNewPersonData(prev => ({ ...prev, last_name: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter last name"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Gender
-                    </label>
-                    <select
-                      value={newPersonData.gender}
-                      onChange={(e) => setNewPersonData(prev => ({ ...prev, gender: e.target.value as 'M' | 'F' | 'O' }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">Select gender</option>
-                      <option value="M">Male</option>
-                      <option value="F">Female</option>
-                      <option value="O">Other</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Birth Date
-                    </label>
-                    <input
-                      type="date"
-                      value={newPersonData.birth_date}
-                      onChange={(e) => setNewPersonData(prev => ({ ...prev, birth_date: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center space-x-2 mb-3">
-                      <input
-                        id="is_deceased_spouse"
-                        type="checkbox"
-                        checked={newPersonData.is_deceased}
-                        onChange={(e) => {
-                          const isDeceased = e.target.checked;
-                          setNewPersonData(prev => ({ 
-                            ...prev, 
-                            is_deceased: isDeceased,
-                            death_date: isDeceased ? prev.death_date : '',
-                            death_place: isDeceased ? prev.death_place : ''
-                          }));
-                        }}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <label htmlFor="is_deceased_spouse" className="text-sm font-medium text-gray-700">
-                        Person is deceased
-                      </label>
-                    </div>
-
-                    {newPersonData.is_deceased && (
-                      <>
-                        <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Death Date
-                          </label>
-                          <input
-                            type="date"
-                            value={newPersonData.death_date}
-                            onChange={(e) => setNewPersonData(prev => ({ ...prev, death_date: e.target.value }))}
-                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Death Place
-                          </label>
-                          <input
-                            type="text"
-                            value={newPersonData.death_place}
-                            onChange={(e) => setNewPersonData(prev => ({ ...prev, death_place: e.target.value }))}
-                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Enter place of death"
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  <PersonForm
+                    formData={newPersonData}
+                    onChange={updatePersonData}
+                    disabled={addRelationshipMutation.isPending}
+                    showNotes={false}
+                  />
 
                   {/* Relationship details */}
                   <div className="border-t pt-4 mt-4">
                     <h4 className="text-sm font-medium text-gray-700 mb-3">Relationship Details</h4>
-                    
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Relationship Type
-                        </label>
-                        <select
-                          value={spouseData.relationship_type}
-                          onChange={(e) => setSpouseData(prev => ({ ...prev, relationship_type: e.target.value as 'spouse' | 'partner' | 'divorced' | 'separated' }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="spouse">Spouse</option>
-                          <option value="partner">Partner</option>
-                          <option value="divorced">Divorced</option>
-                          <option value="separated">Separated</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          {spouseData.relationship_type === 'spouse' ? 'Marriage Date' : 'Start Date'}
-                        </label>
-                        <input
-                          type="date"
-                          value={spouseData.start_date}
-                          onChange={(e) => setSpouseData(prev => ({ ...prev, start_date: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-
-                      {(spouseData.relationship_type === 'divorced' || spouseData.relationship_type === 'separated') && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            {spouseData.relationship_type === 'divorced' ? 'Divorce Date' : 'Separation Date'}
-                          </label>
-                          <input
-                            type="date"
-                            value={spouseData.end_date}
-                            onChange={(e) => setSpouseData(prev => ({ ...prev, end_date: e.target.value }))}
-                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                      )}
-
-                      {spouseData.relationship_type === 'spouse' && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Marriage Place
-                          </label>
-                          <input
-                            type="text"
-                            value={spouseData.marriage_place}
-                            onChange={(e) => setSpouseData(prev => ({ ...prev, marriage_place: e.target.value }))}
-                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Enter marriage location"
-                          />
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Notes
-                        </label>
-                        <textarea
-                          value={spouseData.relationship_notes}
-                          onChange={(e) => setSpouseData(prev => ({ ...prev, relationship_notes: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          rows={3}
-                          placeholder="Enter any additional notes about the relationship"
-                        />
-                      </div>
-                    </div>
+                    <RelationshipForm
+                      formData={spouseData}
+                      onChange={updateSpouseData}
+                      disabled={addRelationshipMutation.isPending}
+                    />
                   </div>
                 </div>
               ) : (
                 // Dropdown for selecting existing person + relationship details
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select Spouse:
-                    </label>
-                    <select
-                      value={selectedPersonId}
-                      onChange={(e) => setSelectedPersonId(e.target.value)}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">Choose a person...</option>
-                      {availablePeople.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.first_name} {p.last_name}
-                          {p.birth_date && ` (${new Date(p.birth_date).getFullYear()})`}
-                        </option>
-                      ))}
-                    </select>
+                  <Select
+                    label="Select Spouse"
+                    name="spouse_id"
+                    value={selectedPersonId}
+                    onChange={(e) => setSelectedPersonId(e.target.value)}
+                    disabled={addRelationshipMutation.isPending}
+                    options={[
+                      { value: '', label: 'Choose a person...' },
+                      ...availablePeople.map((p) => ({
+                        value: p.id,
+                        label: `${p.first_name} ${p.last_name}${p.birth_date ? ` (${new Date(p.birth_date).getFullYear()})` : ''}`
+                      }))
+                    ]}
+                  />
 
-                    {availablePeople.length === 0 && (
-                      <div className="text-center py-4 mt-4">
-                        <UserPlusIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">
-                          No other people in this family tree yet.
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          Create a new person or add more family members first.
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  {availablePeople.length === 0 && (
+                    <div className="text-center py-4 mt-4">
+                      <UserPlusIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">
+                        No other people in this family tree yet.
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Create a new person or add more family members first.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Relationship details for linking existing person */}
                   <div className="border-t pt-4 mt-4">
                     <h4 className="text-sm font-medium text-gray-700 mb-3">Relationship Details</h4>
-                    
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Relationship Type
-                        </label>
-                        <select
-                          value={spouseData.relationship_type}
-                          onChange={(e) => setSpouseData(prev => ({ ...prev, relationship_type: e.target.value as 'spouse' | 'partner' | 'divorced' | 'separated' }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="spouse">Spouse</option>
-                          <option value="partner">Partner</option>
-                          <option value="divorced">Divorced</option>
-                          <option value="separated">Separated</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          {spouseData.relationship_type === 'spouse' ? 'Marriage Date' : 'Start Date'}
-                        </label>
-                        <input
-                          type="date"
-                          value={spouseData.start_date}
-                          onChange={(e) => setSpouseData(prev => ({ ...prev, start_date: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-
-                      {(spouseData.relationship_type === 'divorced' || spouseData.relationship_type === 'separated') && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            {spouseData.relationship_type === 'divorced' ? 'Divorce Date' : 'Separation Date'}
-                          </label>
-                          <input
-                            type="date"
-                            value={spouseData.end_date}
-                            onChange={(e) => setSpouseData(prev => ({ ...prev, end_date: e.target.value }))}
-                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                      )}
-
-                      {spouseData.relationship_type === 'spouse' && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Marriage Place
-                          </label>
-                          <input
-                            type="text"
-                            value={spouseData.marriage_place}
-                            onChange={(e) => setSpouseData(prev => ({ ...prev, marriage_place: e.target.value }))}
-                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Enter marriage location"
-                          />
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Notes
-                        </label>
-                        <textarea
-                          value={spouseData.relationship_notes}
-                          onChange={(e) => setSpouseData(prev => ({ ...prev, relationship_notes: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          rows={3}
-                          placeholder="Enter any additional notes about the relationship"
-                        />
-                      </div>
-                    </div>
+                    <RelationshipForm
+                      formData={spouseData}
+                      onChange={updateSpouseData}
+                      disabled={addRelationshipMutation.isPending}
+                    />
                   </div>
                 </div>
               )}
@@ -596,131 +389,29 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
 
                 {isCreatingNew ? (
                   // Form for creating new person
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        First Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={newPersonData.first_name}
-                        onChange={(e) => setNewPersonData(prev => ({ ...prev, first_name: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter first name"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Last Name
-                      </label>
-                      <input
-                        type="text"
-                        value={newPersonData.last_name}
-                        onChange={(e) => setNewPersonData(prev => ({ ...prev, last_name: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter last name"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Gender
-                      </label>
-                      <select
-                        value={newPersonData.gender}
-                        onChange={(e) => setNewPersonData(prev => ({ ...prev, gender: e.target.value as 'M' | 'F' | 'O' }))}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select gender</option>
-                        <option value="M">Male</option>
-                        <option value="F">Female</option>
-                        <option value="O">Other</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Birth Date
-                      </label>
-                      <input
-                        type="date"
-                        value={newPersonData.birth_date}
-                        onChange={(e) => setNewPersonData(prev => ({ ...prev, birth_date: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center space-x-2 mb-3">
-                        <input
-                          id="is_deceased_modal"
-                          type="checkbox"
-                          checked={newPersonData.is_deceased}
-                          onChange={(e) => {
-                            const isDeceased = e.target.checked;
-                            setNewPersonData(prev => ({ 
-                              ...prev, 
-                              is_deceased: isDeceased,
-                              death_date: isDeceased ? prev.death_date : '',
-                              death_place: isDeceased ? prev.death_place : ''
-                            }));
-                          }}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <label htmlFor="is_deceased_modal" className="text-sm font-medium text-gray-700">
-                          Person is deceased
-                        </label>
-                      </div>
-
-                      {newPersonData.is_deceased && (
-                        <>
-                          <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Death Date
-                            </label>
-                            <input
-                              type="date"
-                              value={newPersonData.death_date}
-                              onChange={(e) => setNewPersonData(prev => ({ ...prev, death_date: e.target.value }))}
-                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Death Place
-                            </label>
-                            <input
-                              type="text"
-                              value={newPersonData.death_place}
-                              onChange={(e) => setNewPersonData(prev => ({ ...prev, death_place: e.target.value }))}
-                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter place of death"
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                  <PersonForm
+                    formData={newPersonData}
+                    onChange={updatePersonData}
+                    disabled={addRelationshipMutation.isPending}
+                    showNotes={false}
+                  />
                 ) : (
                   // Dropdown for selecting existing person
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select {activeTab === 'parent' ? 'Parent' : 'Child'}:
-                    </label>
-                    <select
+                    <Select
+                      label={`Select ${activeTab === 'parent' ? 'Parent' : 'Child'}`}
+                      name="person_id"
                       value={selectedPersonId}
                       onChange={(e) => setSelectedPersonId(e.target.value)}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">Choose a person...</option>
-                      {availablePeople.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.first_name} {p.last_name}
-                          {p.birth_date && ` (${new Date(p.birth_date).getFullYear()})`}
-                        </option>
-                      ))}
-                    </select>
+                      disabled={addRelationshipMutation.isPending}
+                      options={[
+                        { value: '', label: 'Choose a person...' },
+                        ...availablePeople.map((p) => ({
+                          value: p.id,
+                          label: `${p.first_name} ${p.last_name}${p.birth_date ? ` (${new Date(p.birth_date).getFullYear()})` : ''}`
+                        }))
+                      ]}
+                    />
 
                     {availablePeople.length === 0 && (
                       <div className="text-center py-4 mt-4">

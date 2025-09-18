@@ -1,27 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import { adminService } from '../../services/adminService';
-import type { User, PaginatedResponse, Role } from '../../types';
+import { adminService, type RoleResponse } from '../../services/adminService';
+import type { User, PaginatedResponse } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { userHasRole } from '../../types';
+import { showSuccessToast, showErrorToast } from '../../utils/toast';
+import { AddUserModal } from '../../components/admin/AddUserModal';
 
 export const AdminUsersPage: React.FC = () => {
   const [users, setUsers] = useState<PaginatedResponse<User> | null>(null);
-  const [roles, setRoles] = useState<Role[]>([]);
+  const [roles, setRoles] = useState<RoleResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string>('');
+  const [search, setSearch] = useState<string | null>(null);
+  const [roleFilter, setRoleFilter] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const data = await adminService.getUsers({
-        search: search || undefined,
-        role: roleFilter || undefined,
+        search: search,
+        role: roleFilter,
       });
       setUsers(data);
     } catch (err) {
       setError('Failed to load users');
+      showErrorToast('Failed to load users. Please refresh the page.');
       console.error('Users error:', err);
     } finally {
       setLoading(false);
@@ -44,12 +48,13 @@ export const AdminUsersPage: React.FC = () => {
 
   const handleDeleteUser = async (userId: number) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
-    
+
     try {
       await adminService.deleteUser(userId);
+      showSuccessToast('User deleted successfully!');
       fetchUsers(); // Refresh the list
     } catch (err) {
-      alert('Failed to delete user');
+      showErrorToast('Failed to delete user. Please try again.');
       console.error('Delete error:', err);
     }
   };
@@ -79,7 +84,10 @@ export const AdminUsersPage: React.FC = () => {
             Manage all users in the system
           </p>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700">
+        <Button 
+          className="bg-blue-600 hover:bg-blue-700"
+          onClick={() => setShowAddModal(true)}
+        >
           Add New User
         </Button>
       </div>
@@ -93,8 +101,8 @@ export const AdminUsersPage: React.FC = () => {
             </label>
             <input
               type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={search || ''}
+              onChange={(e) => setSearch(e.target.value || null)}
               placeholder="Search by name or email..."
               className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
             />
@@ -104,14 +112,14 @@ export const AdminUsersPage: React.FC = () => {
               Filter by Role
             </label>
             <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
+              value={roleFilter || ''}
+              onChange={(e) => setRoleFilter(e.target.value || null)}
               className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Roles</option>
               {roles.map((role) => (
-                <option key={role.id} value={role.name}>
-                  {role.name.charAt(0).toUpperCase() + role.name.slice(1)}
+                <option key={role.value} value={role.value}>
+                  {role.name}
                 </option>
               ))}
             </select>
@@ -163,7 +171,7 @@ export const AdminUsersPage: React.FC = () => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    userHasRole(user, 'admin') 
+                    userHasRole(user, 'admin')
                       ? 'bg-purple-100 text-purple-800'
                       : 'bg-gray-100 text-gray-800'
                   }`}>
@@ -180,7 +188,7 @@ export const AdminUsersPage: React.FC = () => {
                   <button className="text-blue-600 hover:text-blue-900">
                     Edit
                   </button>
-                  <button 
+                  <button
                     onClick={() => handleDeleteUser(user.id)}
                     className="text-red-600 hover:text-red-900"
                   >
@@ -200,7 +208,7 @@ export const AdminUsersPage: React.FC = () => {
       </div>
 
       {/* Pagination */}
-      {users && users.meta.last_page > 1 && (
+      {users && users.last_page > 1 && (
         <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
           <div className="flex-1 flex justify-between sm:hidden">
             <button className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
@@ -215,12 +223,22 @@ export const AdminUsersPage: React.FC = () => {
               <p className="text-sm text-gray-700">
                 Showing <span className="font-medium">1</span> to{' '}
                 <span className="font-medium">{users.data.length}</span> of{' '}
-                <span className="font-medium">{users.meta.total}</span> results
+                <span className="font-medium">{users.total}</span> results
               </p>
             </div>
           </div>
         </div>
       )}
+
+      {/* Add User Modal */}
+      <AddUserModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onUserCreated={() => {
+          setShowAddModal(false);
+          fetchUsers(); // Refresh the users list
+        }}
+      />
     </div>
   );
 };

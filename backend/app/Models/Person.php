@@ -40,6 +40,7 @@ class Person extends Model
         return [
             'birth_date' => 'date',
             'death_date' => 'date',
+            'is_deceased' => 'bool',
         ];
     }
 

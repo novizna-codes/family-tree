@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { adminService } from '../../services/adminService';
 import type { SystemSetting } from '../../types';
 import { Button } from '../../components/ui/Button';
+import { showSuccessToast, showErrorToast } from '../../utils/toast';
 
 export const AdminSettingsPage: React.FC = () => {
   const [settings, setSettings] = useState<Record<string, SystemSetting>>({});
@@ -27,6 +28,7 @@ export const AdminSettingsPage: React.FC = () => {
         setValues(initialValues);
       } catch (err) {
         setError('Failed to load settings');
+        showErrorToast('Failed to load settings. Please refresh the page.');
         console.error('Settings error:', err);
       } finally {
         setLoading(false);
@@ -47,13 +49,30 @@ export const AdminSettingsPage: React.FC = () => {
       }));
 
       await adminService.updateSettings(settingsToUpdate);
-      alert('Settings saved successfully!');
+      showSuccessToast('Settings saved successfully! 🎉');
     } catch (err) {
-      alert('Failed to save settings');
+      showErrorToast('Failed to save settings. Please try again.');
       console.error('Save error:', err);
     } finally {
       setSaving(false);
     }
+  };
+
+  const getSettingHelpText = (setting: SystemSetting) => {
+    const helpTexts: Record<string, string> = {
+      'public_registration_enabled': 'When disabled, new users cannot register through the public signup form.',
+      'max_trees_per_user': 'Set to 0 for unlimited trees per user.',
+      'max_tree_size': 'Set to 0 for unlimited people per family tree.',
+      'privacy_default': 'Controls the default visibility of new family trees: private (only creator), family (shared with family), or public (visible to all).',
+      'session_timeout': 'Users will be automatically logged out after this period of inactivity.',
+      'max_file_upload_size': 'Maximum size for photos and documents. Server limits may also apply.',
+      'maintenance_mode': 'When enabled, only administrators can access the application.',
+      'backup_frequency': 'How often automatic backups are created. Manual backups can be created anytime.',
+      'enable_email_notifications': 'Controls whether the system sends email notifications for important events like invitations and updates.',
+      'default_language': 'Language used for new users and as fallback when user preference is not set.',
+    };
+    
+    return helpTexts[setting.key] || null;
   };
 
   const handleValueChange = (key: string, value: any) => {
@@ -79,6 +98,48 @@ export const AdminSettingsPage: React.FC = () => {
   const renderSettingInput = (setting: SystemSetting) => {
     const value = values[setting.key];
 
+    // Special cases for specific settings
+    if (setting.key === 'privacy_default') {
+      return (
+        <select
+          value={value || 'private'}
+          onChange={(e) => handleValueChange(setting.key, e.target.value)}
+          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+        >
+          <option value="private">Private</option>
+          <option value="family">Family</option>
+          <option value="public">Public</option>
+        </select>
+      );
+    }
+
+    if (setting.key === 'backup_frequency') {
+      return (
+        <select
+          value={value || 'weekly'}
+          onChange={(e) => handleValueChange(setting.key, e.target.value)}
+          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+        >
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      );
+    }
+
+    if (setting.key === 'default_language') {
+      return (
+        <select
+          value={value || 'en'}
+          onChange={(e) => handleValueChange(setting.key, e.target.value)}
+          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+        >
+          <option value="en">English</option>
+          <option value="ur">اردو (Urdu)</option>
+        </select>
+      );
+    }
+
     switch (setting.type) {
       case 'boolean':
         return (
@@ -93,8 +154,12 @@ export const AdminSettingsPage: React.FC = () => {
         return (
           <input
             type="number"
-            value={value || ''}
-            onChange={(e) => handleValueChange(setting.key, parseInt(e.target.value) || 0)}
+            min="0"
+            value={value === null || value === undefined ? '' : value}
+            onChange={(e) => {
+              const numValue = e.target.value === '' ? 0 : parseInt(e.target.value);
+              handleValueChange(setting.key, isNaN(numValue) ? 0 : numValue);
+            }}
             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
           />
         );
@@ -131,45 +196,31 @@ export const AdminSettingsPage: React.FC = () => {
       <div className="bg-white shadow rounded-lg">
         <div className="px-4 py-5 sm:p-6">
           <div className="space-y-6">
-            {Object.values(settings).map((setting) => (
-              <div key={setting.key} className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                <div className="sm:col-span-1">
-                  <label className="block text-sm font-medium text-gray-900">
-                    {setting.key.split('_').map(word => 
-                      word.charAt(0).toUpperCase() + word.slice(1)
-                    ).join(' ')}
-                  </label>
-                  <p className="mt-1 text-sm text-gray-500">
-                    {setting.description}
-                  </p>
+            {Object.values(settings).map((setting) => {
+              const helpText = getSettingHelpText(setting);
+              return (
+                <div key={setting.key} className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                  <div className="sm:col-span-1">
+                    <label className="block text-sm font-medium text-gray-900">
+                      {setting.key.split('_').map(word => 
+                        word.charAt(0).toUpperCase() + word.slice(1)
+                      ).join(' ')}
+                    </label>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {setting.description}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    {renderSettingInput(setting)}
+                    {helpText && (
+                      <p className="mt-2 text-sm text-gray-600 border-l-2 border-blue-400 pl-3">
+                        {helpText}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className="sm:col-span-2">
-                  {renderSettingInput(setting)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Important Settings Highlight */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <span className="text-yellow-400">⚠️</span>
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-yellow-800">
-              Important Settings
-            </h3>
-            <div className="mt-2 text-sm text-yellow-700">
-              <p>
-                • <strong>Public Registration:</strong> When disabled, new users cannot register through the public signup form.
-              </p>
-              <p>
-                • <strong>Max Trees Per User:</strong> Set to 0 for unlimited trees per user.
-              </p>
-            </div>
+              );
+            })}
           </div>
         </div>
       </div>

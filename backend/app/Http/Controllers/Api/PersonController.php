@@ -43,14 +43,7 @@ class PersonController extends Controller
             'is_deceased' => 'nullable|boolean',
         ]);
 
-        // Handle is_deceased logic
-        if (isset($validated['is_deceased'])) {
-            if (!$validated['is_deceased']) {
-                // If not deceased, clear death fields
-                $validated['death_date'] = null;
-                $validated['death_place'] = null;
-            }
-        }
+        $validated = $this->processPersonData($validated);
 
         $person = $familyTree->people()->create($validated);
 
@@ -105,14 +98,7 @@ class PersonController extends Controller
             'is_deceased' => 'nullable|boolean',
         ]);
 
-        // Handle is_deceased logic
-        if (isset($validated['is_deceased'])) {
-            if (!$validated['is_deceased']) {
-                // If not deceased, clear death fields
-                $validated['death_date'] = null;
-                $validated['death_place'] = null;
-            }
-        }
+        $validated = $this->processPersonData($validated);
 
         $person->update($validated);
 
@@ -155,14 +141,7 @@ class PersonController extends Controller
         $parentData = $validated;
         unset($parentData['parent_type']);
 
-        // Handle is_deceased logic
-        if (isset($parentData['is_deceased'])) {
-            if (!$parentData['is_deceased']) {
-                $parentData['death_date'] = null;
-                $parentData['death_place'] = null;
-            }
-        }
-
+        $parentData = $this->processPersonData($parentData);
         $parentData['family_tree_id'] = $familyTree->id;
 
         $parent = Person::create($parentData);
@@ -193,14 +172,7 @@ class PersonController extends Controller
 
         $childData = $validated;
 
-        // Handle is_deceased logic
-        if (isset($childData['is_deceased'])) {
-            if (!$childData['is_deceased']) {
-                $childData['death_date'] = null;
-                $childData['death_place'] = null;
-            }
-        }
-
+        $childData = $this->processPersonData($childData);
         $childData['family_tree_id'] = $familyTree->id;
 
         if ($person->gender === 'M') {
@@ -304,18 +276,13 @@ class PersonController extends Controller
             'relationship_notes' => 'nullable|string',
         ]);
 
-        // Handle is_deceased logic
-        if (isset($validated['is_deceased'])) {
-            if (!$validated['is_deceased']) {
-                $validated['death_date'] = null;
-                $validated['death_place'] = null;
-            }
-        }
-
         // Extract person data (remove relationship fields)
         $spouseData = collect($validated)->except([
             'relationship_type', 'start_date', 'end_date', 'marriage_place', 'relationship_notes'
         ])->toArray();
+
+        $spouseData = $this->processPersonData($spouseData);
+        $spouseData['family_tree_id'] = $familyTree->id;
 
         // Create the spouse
         $spouse = $familyTree->people()->create($spouseData);
@@ -429,5 +396,21 @@ class PersonController extends Controller
         return response()->json([
             'message' => 'Spouse relationship removed successfully',
         ]);
+    }
+
+    /**
+     * Helper method to handle is_deceased logic for person data
+     */
+    private function processPersonData(array $personData): array
+    {
+        // Handle is_deceased logic
+        if (isset($personData['is_deceased'])) {
+            if (!$personData['is_deceased']) {
+                $personData['death_date'] = null;
+                $personData['death_place'] = null;
+            }
+        }
+
+        return $personData;
     }
 }
