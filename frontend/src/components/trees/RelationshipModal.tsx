@@ -457,13 +457,13 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
                     {person.children && person.children.length > 0 && (
                       <div>Children: {person.children.map(c => `${c.first_name} ${c.last_name}`).join(', ')}</div>
                     )}
-                    {person.spouses && person.spouses.length > 0 && (
-                      <div>
-                        Spouses: {person.spouses.map(s => 
-                          `${s.first_name} ${s.last_name} (${s.relationship.type})`
-                        ).join(', ')}
-                      </div>
-                    )}
+                     {person.spouses && person.spouses.length > 0 && (
+                       <div>
+                         Spouses: {person.spouses.map(s => 
+                           `${s.first_name} ${s.last_name} (${s.relationship?.type || 'spouse'})`
+                         ).join(', ')}
+                       </div>
+                     )}
                     {!person.father && !person.mother && (!person.children || person.children.length === 0) && (!person.spouses || person.spouses.length === 0) && (
                       <div className="text-gray-400 italic">No relationships yet</div>
                     )}

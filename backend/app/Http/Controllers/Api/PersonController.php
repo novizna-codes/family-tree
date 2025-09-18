@@ -15,7 +15,7 @@ class PersonController extends Controller
         $this->authorize('view', $familyTree);
 
         $people = $familyTree->people()
-            ->with(['father', 'mother', 'relationshipsAsPerson1', 'relationshipsAsPerson2'])
+            ->with(['father', 'mother'])
             ->get();
 
         return response()->json([
@@ -136,7 +136,7 @@ class PersonController extends Controller
         ]);
 
         $relationshipType = $request->relationship_type;
-        $relationshipRole = $request->relationship_role;
+        $relationshipRole = $request->relationship_role ?? null;
 
         switch ($relationshipType) {
             case 'parent':
@@ -164,7 +164,7 @@ class PersonController extends Controller
         ]);
 
         $relationshipType = $validated['relationship_type'];
-        $relationshipRole = $validated['relationship_role'];
+        $relationshipRole = $validated['relationship_role'] ?? null;
         $relatedPersonId = $validated['related_person_id'];
 
         switch ($relationshipType) {

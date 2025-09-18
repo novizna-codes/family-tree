@@ -33,6 +33,7 @@ class Person extends Model
         'full_name',
         'age',
         'is_living',
+        'spouses',
     ];
 
     protected function casts(): array
@@ -137,5 +138,28 @@ class Person extends Model
     public function getIsLivingAttribute(): bool
     {
         return $this->is_deceased === false;
+    }
+
+    public function getSpousesAttribute()
+    {
+        $relationships = $this->getAllSpouseRelationships()->with(['person1', 'person2'])->get();
+        
+        return $relationships->map(function ($relationship) {
+            $spouse = $relationship->person1_id === $this->id 
+                ? $relationship->person2 
+                : $relationship->person1;
+                
+            return [
+                'id' => $spouse->id,
+                'first_name' => $spouse->first_name,
+                'last_name' => $spouse->last_name,
+                'relationship' => [
+                    'id' => $relationship->id,
+                    'type' => $relationship->relationship_type,
+                    'start_date' => $relationship->start_date,
+                    'end_date' => $relationship->end_date,
+                ]
+            ];
+        });
     }
 }
