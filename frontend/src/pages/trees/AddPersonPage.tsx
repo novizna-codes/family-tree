@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useFamilyTreeStore } from '@/store/familyTreeStore';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { treeService } from '@/services/treeService';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { CreatePersonData } from '@/services/familyTreeService';
@@ -8,7 +9,30 @@ import type { CreatePersonData } from '@/services/familyTreeService';
 export const AddPersonPage: React.FC = () => {
   const { id: treeId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { currentTree, people, createPerson, loadPeople } = useFamilyTreeStore();
+  const queryClient = useQueryClient();
+
+  const { data: tree } = useQuery({
+    queryKey: ['tree', treeId],
+    queryFn: () => treeService.getTree(treeId!),
+    enabled: !!treeId,
+  });
+
+  const { data: people = [] } = useQuery({
+    queryKey: ['people', treeId],
+    queryFn: () => treeService.getPeople(treeId!),
+    enabled: !!treeId,
+  });
+
+  const createPersonMutation = useMutation({
+    mutationFn: async (data: CreatePersonData) => {
+      return treeService.createPerson(treeId!, data);
+    },
+    onSuccess: () => {
+      // Invalidate and refetch people data
+      queryClient.invalidateQueries({ queryKey: ['people', treeId] });
+      navigate(`/trees/${treeId}`);
+    },
+  });
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -26,15 +50,7 @@ export const AddPersonPage: React.FC = () => {
     is_deceased: false,
   });
 
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Load existing people for parent selection
-  useEffect(() => {
-    if (treeId) {
-      loadPeople(treeId);
-    }
-  }, [treeId, loadPeople]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -69,7 +85,6 @@ export const AddPersonPage: React.FC = () => {
     }
 
     try {
-      setLoading(true);
       setError(null);
       
       const personData: Partial<CreatePersonData> = {};
@@ -91,12 +106,9 @@ export const AddPersonPage: React.FC = () => {
         return;
       }
       
-      await createPerson(treeId, personData as CreatePersonData);
-      navigate(`/trees/${treeId}`);
+      await createPersonMutation.mutateAsync(personData as CreatePersonData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create person');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -111,7 +123,7 @@ export const AddPersonPage: React.FC = () => {
               </svg>
             </Link>
             <h1 className="text-xl font-semibold text-gray-900">
-              Add Person to {currentTree?.name}
+              Add Person to {tree?.name}
             </h1>
           </div>
         </div>
@@ -336,12 +348,12 @@ export const AddPersonPage: React.FC = () => {
 
               <div className="mt-8 flex justify-end space-x-3">
                 <Link to={`/trees/${treeId}`}>
-                  <Button variant="outline" disabled={loading}>
+                  <Button variant="outline" disabled={createPersonMutation.isPending}>
                     Cancel
                   </Button>
                 </Link>
-                <Button type="submit" disabled={loading || !formData.first_name.trim()}>
-                  {loading ? 'Adding...' : 'Add Person'}
+                <Button type="submit" disabled={createPersonMutation.isPending || !formData.first_name.trim()}>
+                  {createPersonMutation.isPending ? 'Adding...' : 'Add Person'}
                 </Button>
               </div>
             </form>

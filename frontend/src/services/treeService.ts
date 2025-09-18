@@ -14,14 +14,10 @@ export const treeService = {
   updatePerson: (treeId: string, personId: string, data: any) => familyTreeService.updatePerson(treeId, personId, data),
   deletePerson: (treeId: string, personId: string) => familyTreeService.deletePerson(treeId, personId),
   
-  addParent: (treeId: string, personId: string, data: any) => familyTreeService.addParent(treeId, personId, data),
-  addChild: (treeId: string, personId: string, data: any) => familyTreeService.addChild(treeId, personId, data),
-  linkParent: (treeId: string, personId: string, data: any) => familyTreeService.linkParent(treeId, personId, data),
-  linkChild: (treeId: string, personId: string, data: any) => familyTreeService.linkChild(treeId, personId, data),
-  
-  addSpouse: (treeId: string, personId: string, data: any) => familyTreeService.addSpouse(treeId, personId, data),
-  linkSpouse: (treeId: string, personId: string, data: any) => familyTreeService.linkSpouse(treeId, personId, data),
-  removeSpouse: (treeId: string, personId: string, spouseId: string) => familyTreeService.removeSpouse(treeId, personId, spouseId),
+  // UNIFIED RELATIONSHIP METHODS
+  createRelationship: (treeId: string, personId: string, data: any) => familyTreeService.createRelationship(treeId, personId, data),
+  linkExistingRelationship: (treeId: string, personId: string, data: any) => familyTreeService.linkExistingRelationship(treeId, personId, data),
+  removeRelationship: (treeId: string, personId: string, relationshipId: string) => familyTreeService.removeRelationship(treeId, personId, relationshipId),
   
   getVisualization: (treeId: string, focusPersonId?: string) => familyTreeService.getTreeVisualization(treeId, focusPersonId),
   exportTree: (treeId: string, format?: string) => familyTreeService.exportTree(treeId, format),

@@ -57,16 +57,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/trees/{familyTree}/people/{person}', [PersonController::class, 'update']);
     Route::delete('/trees/{familyTree}/people/{person}', [PersonController::class, 'destroy']);
     
-    // Special person relationship routes
-    Route::post('/trees/{familyTree}/people/{person}/add-parent', [PersonController::class, 'addParent']);
-    Route::post('/trees/{familyTree}/people/{person}/add-child', [PersonController::class, 'addChild']);
-    Route::post('/trees/{familyTree}/people/{person}/link-parent', [PersonController::class, 'linkParent']);
-    Route::post('/trees/{familyTree}/people/{person}/link-child', [PersonController::class, 'linkChild']);
-    
-    // Spouse relationship routes
-    Route::post('/trees/{familyTree}/people/{person}/add-spouse', [PersonController::class, 'addSpouse']);
-    Route::post('/trees/{familyTree}/people/{person}/link-spouse', [PersonController::class, 'linkSpouse']);
-    Route::delete('/trees/{familyTree}/people/{person}/spouse/{spouse}', [PersonController::class, 'removeSpouse']);
+    // Unified relationship management routes
+    Route::post('/trees/{familyTree}/people/{person}/relationships', [PersonController::class, 'manageRelationship']);
+    Route::post('/trees/{familyTree}/people/{person}/relationships/link', [PersonController::class, 'linkRelationship']);
+    Route::delete('/trees/{familyTree}/people/{person}/relationships/{relationship}', [PersonController::class, 'removeRelationship']);
 
     // Admin routes
     Route::middleware('admin')->prefix('admin')->group(function () {

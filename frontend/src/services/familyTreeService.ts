@@ -31,35 +31,10 @@ export interface AddParentData {
   gender?: 'M' | 'F' | 'O';
   birth_date?: string;
   death_date?: string;
-}
-
-export interface CreateSpouseData {
-  first_name: string;
-  last_name?: string;
-  maiden_name?: string;
-  nickname?: string;
-  gender?: 'M' | 'F' | 'O';
-  birth_date?: string;
-  death_date?: string;
   birth_place?: string;
   death_place?: string;
   notes?: string;
   is_deceased?: boolean;
-  // Relationship fields
-  relationship_type: 'spouse' | 'partner' | 'divorced' | 'separated';
-  start_date?: string;
-  end_date?: string;
-  marriage_place?: string;
-  relationship_notes?: string;
-}
-
-export interface AddParentData {
-  parent_type: 'father' | 'mother';
-  first_name: string;
-  last_name?: string;
-  gender?: 'M' | 'F' | 'O';
-  birth_date?: string;
-  death_date?: string;
 }
 
 export interface CreateSpouseData {
@@ -89,7 +64,11 @@ export interface FamilyTreeVisualizationData {
   focus_person_id?: string;
 }
 
-export interface CreateSpouseData {
+// Unified relationship management interfaces
+export interface CreateRelationshipData {
+  relationship_type: 'parent' | 'child' | 'spouse';
+  relationship_role?: string; // 'father'/'mother' for parent, relationship type for spouse
+  // Person data
   first_name: string;
   last_name?: string;
   maiden_name?: string;
@@ -101,8 +80,18 @@ export interface CreateSpouseData {
   death_place?: string;
   notes?: string;
   is_deceased?: boolean;
-  // Relationship fields
-  relationship_type: 'spouse' | 'partner' | 'divorced' | 'separated';
+  // Relationship-specific data (for spouse relationships)
+  start_date?: string;
+  end_date?: string;
+  marriage_place?: string;
+  relationship_notes?: string;
+}
+
+export interface LinkRelationshipData {
+  relationship_type: 'parent' | 'child' | 'spouse';
+  relationship_role?: string;
+  related_person_id: string;
+  // Relationship-specific data (for spouse relationships)
   start_date?: string;
   end_date?: string;
   marriage_place?: string;
@@ -180,38 +169,29 @@ class FamilyTreeService {
     await api.delete(`/trees/${treeId}/people/${personId}`);
   }
 
-  async addParent(treeId: string, personId: string, data: AddParentData): Promise<Person> {
-    const response = await api.post<{ data: Person }>(`/trees/${treeId}/people/${personId}/add-parent`, data);
+  // NEW UNIFIED RELATIONSHIP MANAGEMENT METHODS
+  
+  /**
+   * Create a new person and establish a relationship (replaces addParent, addChild, addSpouse)
+   */
+  async createRelationship(treeId: string, personId: string, data: CreateRelationshipData): Promise<Person> {
+    const response = await api.post<{ data: Person }>(`/trees/${treeId}/people/${personId}/relationships`, data);
     return response.data;
   }
 
-  async addChild(treeId: string, personId: string, data: CreatePersonData): Promise<Person> {
-    const response = await api.post<{ data: Person }>(`/trees/${treeId}/people/${personId}/add-child`, data);
+  /**
+   * Link existing people in a relationship (replaces linkParent, linkChild, linkSpouse)
+   */
+  async linkExistingRelationship(treeId: string, personId: string, data: LinkRelationshipData): Promise<Person | Relationship> {
+    const response = await api.post<{ data: Person | Relationship }>(`/trees/${treeId}/people/${personId}/relationships/link`, data);
     return response.data;
   }
 
-  async linkParent(treeId: string, personId: string, data: { parent_id: string; parent_type: 'father' | 'mother' }): Promise<Person> {
-    const response = await api.post<{ data: Person }>(`/trees/${treeId}/people/${personId}/link-parent`, data);
-    return response.data;
-  }
-
-  async linkChild(treeId: string, personId: string, data: { child_id: string }): Promise<Person> {
-    const response = await api.post<{ data: Person }>(`/trees/${treeId}/people/${personId}/link-child`, data);
-    return response.data;
-  }
-
-  async addSpouse(treeId: string, personId: string, data: CreateSpouseData): Promise<Person> {
-    const response = await api.post<{ data: Person }>(`/trees/${treeId}/people/${personId}/add-spouse`, data);
-    return response.data;
-  }
-
-  async linkSpouse(treeId: string, personId: string, data: LinkSpouseData): Promise<Relationship> {
-    const response = await api.post<{ data: Relationship }>(`/trees/${treeId}/people/${personId}/link-spouse`, data);
-    return response.data;
-  }
-
-  async removeSpouse(treeId: string, personId: string, spouseId: string): Promise<void> {
-    await api.delete(`/trees/${treeId}/people/${personId}/spouse/${spouseId}`);
+  /**
+   * Remove any type of relationship (replaces removeSpouse and future relationship removals)
+   */
+  async removeRelationship(treeId: string, personId: string, relationshipId: string): Promise<void> {
+    await api.delete(`/trees/${treeId}/people/${personId}/relationships/${relationshipId}`);
   }
 
   async getTreeVisualization(treeId: string, focusPersonId?: string): Promise<FamilyTreeVisualizationData> {

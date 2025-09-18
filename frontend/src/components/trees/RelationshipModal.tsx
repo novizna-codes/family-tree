@@ -82,57 +82,75 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
     mutationFn: async ({ type, relatedPersonId }: { type: RelationshipType; relatedPersonId?: string }) => {
       if (type === 'parent') {
         if (isCreatingNew) {
-          // Create new parent
+          // Create new parent using unified API
           const parentType = newPersonData.gender === 'F' ? 'mother' : 'father';
-          const personData = { ...newPersonData };
+          const relationshipData = {
+            relationship_type: 'parent' as const,
+            relationship_role: parentType,
+            ...newPersonData
+          };
           // If death_date is empty, also clear death_place
-          if (!personData.death_date) {
-            personData.death_place = '';
+          if (!relationshipData.death_date) {
+            relationshipData.death_place = '';
           }
-          return treeService.addParent(treeId, person.id, {
-            ...personData,
-            parent_type: parentType
-          });
+          return treeService.createRelationship(treeId, person.id, relationshipData);
         } else {
-          // Link existing parent
+          // Link existing parent using unified API
           const selectedPerson = people.find(p => p.id === relatedPersonId);
           const parentType = selectedPerson?.gender === 'F' ? 'mother' : 'father';
 
-          return treeService.linkParent(treeId, person.id, {
-            parent_id: relatedPersonId!,
-            parent_type: parentType
+          return treeService.linkExistingRelationship(treeId, person.id, {
+            relationship_type: 'parent',
+            relationship_role: parentType,
+            related_person_id: relatedPersonId!
           });
         }
       } else if (type === 'child') {
         if (isCreatingNew) {
-          // Create new child
-          const personData = { ...newPersonData };
+          // Create new child using unified API
+          const relationshipData = {
+            relationship_type: 'child' as const,
+            ...newPersonData
+          };
           // If death_date is empty, also clear death_place
-          if (!personData.death_date) {
-            personData.death_place = '';
+          if (!relationshipData.death_date) {
+            relationshipData.death_place = '';
           }
-          return treeService.addChild(treeId, person.id, personData);
+          return treeService.createRelationship(treeId, person.id, relationshipData);
         } else {
-          // Link existing child
-          return treeService.linkChild(treeId, person.id, { child_id: relatedPersonId! });
+          // Link existing child using unified API
+          return treeService.linkExistingRelationship(treeId, person.id, {
+            relationship_type: 'child',
+            related_person_id: relatedPersonId!
+          });
         }
         } else if (type === 'spouse') {
           if (isCreatingNew) {
-            // Create new spouse
-            const personData = { ...newPersonData };
+            // Create new spouse using unified API
+            const relationshipData = {
+              relationship_type: 'spouse' as const,
+              relationship_role: spouseData.relationship_type,
+              ...newPersonData,
+              start_date: spouseData.start_date,
+              end_date: spouseData.end_date,
+              marriage_place: spouseData.marriage_place,
+              relationship_notes: spouseData.relationship_notes
+            };
             // If death_date is empty, also clear death_place
-            if (!personData.death_date) {
-              personData.death_place = '';
+            if (!relationshipData.death_date) {
+              relationshipData.death_place = '';
             }
-            return treeService.addSpouse(treeId, person.id, {
-              ...personData,
-              ...spouseData
-            });
+            return treeService.createRelationship(treeId, person.id, relationshipData);
           } else {
-            // Link existing spouse
-            return treeService.linkSpouse(treeId, person.id, {
-              spouse_id: relatedPersonId!,
-              ...spouseData
+            // Link existing spouse using unified API
+            return treeService.linkExistingRelationship(treeId, person.id, {
+              relationship_type: 'spouse',
+              relationship_role: spouseData.relationship_type,
+              related_person_id: relatedPersonId!,
+              start_date: spouseData.start_date,
+              end_date: spouseData.end_date,
+              marriage_place: spouseData.marriage_place,
+              relationship_notes: spouseData.relationship_notes
             });
           }
         }

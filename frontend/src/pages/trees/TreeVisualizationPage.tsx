@@ -34,8 +34,14 @@ export function TreeVisualizationPage() {
   const isLoading = treeLoading || vizLoading;
 
   const addSpouseMutation = useMutation({
-    mutationFn: (data: CreateSpouseData) => 
-      treeService.addSpouse(id!, selectedPerson!.id, data),
+    mutationFn: (data: CreateSpouseData) => {
+      const { relationship_type, ...personData } = data;
+      return treeService.createRelationship(id!, selectedPerson!.id, {
+        relationship_type: 'spouse',
+        relationship_role: relationship_type,
+        ...personData
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['visualization', id] });
       setIsSpouseModalOpen(false);
@@ -44,7 +50,15 @@ export function TreeVisualizationPage() {
 
   const linkSpouseMutation = useMutation({
     mutationFn: (data: LinkSpouseData) => 
-      treeService.linkSpouse(id!, selectedPerson!.id, data),
+      treeService.linkExistingRelationship(id!, selectedPerson!.id, {
+        relationship_type: 'spouse',
+        relationship_role: data.relationship_type,
+        related_person_id: data.spouse_id,
+        start_date: data.start_date,
+        end_date: data.end_date,
+        marriage_place: data.marriage_place,
+        relationship_notes: data.notes
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['visualization', id] });
       setIsSpouseModalOpen(false);
