@@ -418,29 +418,67 @@ function createUnifiedTreeStructure(component: Person[], personMap: Map<string, 
     return personMap.get(potentialRoots[0].id)!;
   }
 
-  // If multiple roots, check if they're connected via spouse relationships
-  // This indicates cross-lineage connections that need special handling
+  // If multiple roots, first check if any of them are connected via descendants/spouses
+  // This handles the case where a parent is added to a spouse and should be part of existing tree
   if (potentialRoots.length > 1) {
-    const spouseConnections = findSpouseConnectionsBetweenLineages(potentialRoots, relationships, personMap);
+    // Find the root that has the most connected descendants
+    let bestRoot = potentialRoots[0];
+    let maxConnections = 0;
     
-    if (spouseConnections.length > 0) {
-      // Create a virtual root structure that encompasses both lineages
-      return createCrossLineageTree(potentialRoots, spouseConnections, personMap, componentIds);
-    }
-  }
-
-  // Default: choose the root with the most descendants
-  if (potentialRoots.length > 0) {
-    const rootWithMostDescendants = potentialRoots.reduce((best, current) => {
-      const bestCount = countDescendants(personMap.get(best.id)!);
-      const currentCount = countDescendants(personMap.get(current.id)!);
-      return currentCount > bestCount ? current : best;
+    potentialRoots.forEach(root => {
+      // Count how many people in the component are descendants of this root
+      const descendants = findAllDescendants(personMap.get(root.id)!, componentIds);
+      // Count spouse connections from this lineage
+      const spouseConnections = countSpouseConnections(root, relationships, componentIds);
+      const totalConnections = descendants.size + spouseConnections;
+      
+      if (totalConnections > maxConnections) {
+        maxConnections = totalConnections;
+        bestRoot = root;
+      }
     });
-    return personMap.get(rootWithMostDescendants.id)!;
+    
+    return personMap.get(bestRoot.id)!;
   }
   
   // Fallback: first person from component
   return personMap.get(component[0].id)!;
+}
+
+// Helper function to find all descendants of a person within a component
+function findAllDescendants(person: any, componentIds: Set<string>, visited = new Set<string>()): Set<string> {
+  const descendants = new Set<string>();
+  
+  if (visited.has(person.id)) return descendants;
+  visited.add(person.id);
+  
+  if (person.children) {
+    person.children.forEach((child: any) => {
+      if (componentIds.has(child.id)) {
+        descendants.add(child.id);
+        const childDescendants = findAllDescendants(child, componentIds, visited);
+        childDescendants.forEach(id => descendants.add(id));
+      }
+    });
+  }
+  
+  return descendants;
+}
+
+// Helper function to count spouse connections from a lineage
+function countSpouseConnections(root: Person, relationships: Relationship[], componentIds: Set<string>): number {
+  let count = 0;
+  
+  relationships.forEach(rel => {
+    if (rel.relationship_type === 'spouse') {
+      const hasPersonInComponent = componentIds.has(rel.person1_id) && componentIds.has(rel.person2_id);
+      if (hasPersonInComponent) {
+        count++;
+      }
+    }
+  });
+  
+  return count;
 }
 
 // Helper function to find spouse connections between different lineages
@@ -532,8 +570,8 @@ function createCrossLineageTree(roots: Person[], spouseConnections: any[], perso
   // Use the primary lineage root as the main structure
   const mainTree = personMap.get(primaryLineage.id)!;
   
-  // Ensure the spouse connection is properly represented
-  // The secondary lineage will be shown via the spouse relationship
+  // The secondary lineage will be connected via spouse relationships
+  // This is handled in the tree rendering where spouses are shown horizontally
   return mainTree;
 }
 
