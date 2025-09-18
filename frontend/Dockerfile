@@ -19,6 +19,39 @@ RUN npm run build
 # Verify build output
 RUN ls -la dist/ && echo "Build completed successfully"
 
+# Development stage for local development
+FROM node:20-alpine AS development
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies including dev dependencies
+RUN npm ci --include=dev && npm cache clean --force
+
+# Copy source code
+COPY . .
+
+# Create start-dev.sh script
+RUN echo '#!/bin/sh' > start-dev.sh && \
+    echo 'echo "Starting Vite development server..."' >> start-dev.sh && \
+    echo 'npm run dev -- --host 0.0.0.0 --port 80' >> start-dev.sh && \
+    chmod +x start-dev.sh
+
+# Expose port 80 for development
+EXPOSE 80
+
+# Use dumb-init as entrypoint for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start development server
+CMD ["./start-dev.sh"]
+
 # Production stage with optimized nginx
 FROM nginx:1.25-alpine AS production
 

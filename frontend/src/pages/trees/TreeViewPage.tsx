@@ -34,13 +34,14 @@ export const TreeViewPage: React.FC = () => {
     enabled: !!id,
   });
 
-  const { data: people = [], isLoading: peopleLoading } = useQuery({
-    queryKey: ['people', id],
-    queryFn: () => treeService.getPeople(id!),
+  const { data: visualization, isLoading: visualizationLoading } = useQuery({
+    queryKey: ['tree', id, 'visualization'],
+    queryFn: () => treeService.getVisualization(id!),
     enabled: !!id,
   });
 
-  const isLoading = treeLoading || peopleLoading;
+  const isLoading = treeLoading || visualizationLoading;
+  const people = visualization?.people || [];
 
   const handlePersonClick = (person: Person, event?: React.MouseEvent) => {
     // Check if user held Ctrl or Shift key to open relationship modal directly
@@ -244,6 +245,7 @@ export const TreeViewPage: React.FC = () => {
                 </div>
                 <TreeVisualization
                   people={people}
+                  relationships={visualization?.relationships}
                   onPersonClick={handlePersonClick}
                   className="w-full h-full"
                 />

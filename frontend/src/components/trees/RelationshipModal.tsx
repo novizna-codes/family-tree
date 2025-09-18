@@ -43,7 +43,7 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
   const queryClient = useQueryClient();
 
   const { data: people = [] } = useQuery({
-    queryKey: ['people', treeId],
+    queryKey: ['tree', treeId, 'people'],
     queryFn: () => treeService.getPeople(treeId),
     enabled: isOpen,
   });
@@ -157,8 +157,7 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
     },
     onSuccess: () => {
       toast.success('Relationship added successfully!');
-      queryClient.invalidateQueries({ queryKey: ['people', treeId] });
-      queryClient.invalidateQueries({ queryKey: ['person', treeId, person.id] });
+      queryClient.invalidateQueries({ queryKey: ['tree', treeId] });
       onClose();
     },
     onError: (error: Error) => {

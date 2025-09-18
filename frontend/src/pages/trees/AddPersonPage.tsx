@@ -18,7 +18,7 @@ export const AddPersonPage: React.FC = () => {
   });
 
   const { data: people = [] } = useQuery({
-    queryKey: ['people', treeId],
+    queryKey: ['tree', treeId, 'people'],
     queryFn: () => treeService.getPeople(treeId!),
     enabled: !!treeId,
   });
@@ -28,8 +28,8 @@ export const AddPersonPage: React.FC = () => {
       return treeService.createPerson(treeId!, data);
     },
     onSuccess: () => {
-      // Invalidate and refetch people data
-      queryClient.invalidateQueries({ queryKey: ['people', treeId] });
+      // Invalidate and refetch related data
+      queryClient.invalidateQueries({ queryKey: ['tree', treeId] });
       navigate(`/trees/${treeId}`);
     },
   });
@@ -86,7 +86,7 @@ export const AddPersonPage: React.FC = () => {
 
     try {
       setError(null);
-      
+
       const personData: Partial<CreatePersonData> = {};
       Object.entries(formData).forEach(([key, value]) => {
         // Skip empty values
@@ -95,17 +95,17 @@ export const AddPersonPage: React.FC = () => {
         }
         (personData as any)[key] = value;
       });
-      
+
       // If death_date is empty, ensure death_place is also empty
       if (!personData.death_date) {
         personData.death_place = '';
       }
-      
+
       if (!personData.first_name) {
         setError('First name is required');
         return;
       }
-      
+
       await createPersonMutation.mutateAsync(personData as CreatePersonData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create person');

@@ -91,7 +91,7 @@ class FamilyTreeController extends Controller
         $focusPersonId = $request->query('focus_person_id');
         
         $people = $familyTree->people()
-            ->with(['father', 'mother', 'spouseRelationships'])
+            ->with(['father', 'mother'])
             ->get();
 
         $relationships = $familyTree->relationships()

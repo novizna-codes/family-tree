@@ -2,18 +2,27 @@ import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import type { Person } from '@/types';
 
-interface TreeNode extends d3.HierarchyNode<Person> {
+interface TreeNode extends d3.HierarchyNode<any> {
   x: number;
   y: number;
 }
 
+interface Relationship {
+  id: string;
+  person1_id: string;
+  person2_id: string;
+  relationship_type: string;
+  relationship_role?: string;
+}
+
 interface TreeVisualizationProps {
   people: Person[];
+  relationships?: Relationship[];
   onPersonClick?: (person: Person, event?: any) => void;
   className?: string;
 }
 
-export function TreeVisualization({ people, onPersonClick, className = '' }: TreeVisualizationProps) {
+export function TreeVisualization({ people, relationships = [], onPersonClick, className = '' }: TreeVisualizationProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
@@ -24,11 +33,17 @@ export function TreeVisualization({ people, onPersonClick, className = '' }: Tre
     svg.selectAll('*').remove(); // Clear previous render
 
     // Create hierarchy data structure
-    const hierarchyData = createHierarchy(people);
+    const hierarchyData = createHierarchy(people, relationships);
 
-    // Create tree layout
-    const treeLayout = d3.tree<Person>()
-      .size([dimensions.width - 100, dimensions.height - 100]);
+    // Create tree layout with more horizontal space for spouses
+    const treeLayout = d3.tree<Person & { spouses?: Person[] }>()
+      .size([dimensions.width - 100, dimensions.height - 100])
+      .separation((a, b) => {
+        // Add extra space if either node has spouses
+        const aHasSpouses = a.data.spouses && a.data.spouses.length > 0;
+        const bHasSpouses = b.data.spouses && b.data.spouses.length > 0;
+        return (aHasSpouses || bHasSpouses) ? 2 : 1;
+      });
 
     const root = d3.hierarchy(hierarchyData);
     const treeData = treeLayout(root) as TreeNode;
@@ -46,6 +61,96 @@ export function TreeVisualization({ people, onPersonClick, className = '' }: Tre
       });
 
     svg.call(zoom);
+
+    // Draw spouse connections before regular links
+    const spouseConnections: any[] = [];
+    
+    treeData.descendants().forEach((node: TreeNode) => {
+      if (node.data.spouses && node.data.spouses.length > 0) {
+        node.data.spouses.forEach((spouse: any, index: number) => {
+          // Position spouses horizontally next to the main person
+          const spouseX = node.x + (index + 1) * 120; // 120px spacing between spouses
+          const spouseY = node.y;
+          
+          spouseConnections.push({
+            person: node.data,
+            spouse,
+            x1: node.x,
+            y1: node.y,
+            x2: spouseX,
+            y2: spouseY
+          });
+        });
+      }
+    });
+
+    // Draw spouse connection lines
+    g.selectAll('.spouse-link')
+      .data(spouseConnections)
+      .enter()
+      .append('line')
+      .attr('class', 'spouse-link')
+      .attr('x1', d => d.x1 + 25) // Start from edge of circle
+      .attr('y1', d => d.y1)
+      .attr('x2', d => d.x2 - 25) // End at edge of circle
+      .attr('y2', d => d.y2)
+      .attr('stroke', '#e11d48') // Pink color for spouse connections
+      .attr('stroke-width', 3)
+      .attr('stroke-dasharray', '5,5'); // Dashed line to distinguish from parent-child
+
+    // Draw spouse nodes
+    const spouseNodes = g.selectAll('.spouse-node')
+      .data(spouseConnections)
+      .enter()
+      .append('g')
+      .attr('class', 'spouse-node')
+      .attr('transform', d => `translate(${d.x2}, ${d.y2})`)
+      .style('cursor', 'pointer')
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        if (onPersonClick) {
+          onPersonClick(d.spouse, event.sourceEvent);
+        }
+      });
+
+    // Add spouse circles
+    spouseNodes.append('circle')
+      .attr('r', 25)
+      .attr('fill', (d) => {
+        const gender = d.spouse.gender;
+        return gender === 'M' ? '#3B82F6' : gender === 'F' ? '#EC4899' : '#6B7280';
+      })
+      .attr('stroke', '#e11d48')
+      .attr('stroke-width', 3)
+      .on('mouseover', function() {
+        d3.select(this).attr('r', 30);
+      })
+      .on('mouseout', function() {
+        d3.select(this).attr('r', 25);
+      });
+
+    // Add spouse names
+    spouseNodes.append('text')
+      .attr('dy', 45)
+      .attr('text-anchor', 'middle')
+      .text(d => `${d.spouse.first_name} ${d.spouse.last_name}`)
+      .attr('fill', '#374151')
+      .attr('font-size', '12px')
+      .attr('font-weight', '500');
+
+    // Add spouse birth year if available
+    spouseNodes.append('text')
+      .attr('dy', 60)
+      .attr('text-anchor', 'middle')
+      .text(d => {
+        if (d.spouse.birth_date) {
+          const year = new Date(d.spouse.birth_date).getFullYear();
+          return `(${year})`;
+        }
+        return '';
+      })
+      .attr('fill', '#6B7280')
+      .attr('font-size', '10px');
 
     // Draw links (connections between people)
     g.selectAll('.link')
@@ -115,7 +220,7 @@ export function TreeVisualization({ people, onPersonClick, className = '' }: Tre
       .attr('fill', '#6B7280')
       .attr('font-size', '10px');
 
-  }, [people, dimensions, onPersonClick]);
+  }, [people, relationships, dimensions, onPersonClick]);
 
   // Handle window resize
   useEffect(() => {
@@ -179,14 +284,18 @@ export function TreeVisualization({ people, onPersonClick, className = '' }: Tre
             <div className="w-4 h-4 rounded-full bg-gray-500"></div>
             <span>Other</span>
           </div>
+          <div className="flex items-center gap-2 mt-1">
+            <div className="w-4 h-1 bg-pink-600" style={{borderTop: '2px dashed #e11d48'}}></div>
+            <span>Spouse</span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// Helper function to create hierarchy from flat array of people
-function createHierarchy(people: Person[]): Person & { children?: Person[] } {
+// Helper function to create hierarchy from flat array of people with spouse relationships
+function createHierarchy(people: Person[], relationships: Relationship[] = []): any {
   if (people.length === 0) {
     return { 
       id: '', 
@@ -207,20 +316,35 @@ function createHierarchy(people: Person[]): Person & { children?: Person[] } {
       notes: null,
       created_at: '',
       updated_at: '',
-      children: [] 
-    } as Person & { children?: Person[] };
+      children: [],
+      spouses: []
+    } as any;
   }
 
   // Create a map for quick lookup
-  const personMap = new Map<string, Person & { children: Person[] }>();
+  const personMap = new Map<string, any>();
   
-  // Initialize all people in the map with children array
+  // Initialize all people in the map with children and spouses arrays
   people.forEach(person => {
-    personMap.set(person.id, { ...person, children: [] });
+    personMap.set(person.id, { ...person, children: [], spouses: [] });
+  });
+
+  // Build spouse relationships
+  relationships.forEach(relationship => {
+    if (relationship.relationship_type === 'spouse') {
+      const person1 = personMap.get(relationship.person1_id);
+      const person2 = personMap.get(relationship.person2_id);
+      
+      if (person1 && person2) {
+        // Add each as spouse of the other
+        person1.spouses.push(person2);
+        person2.spouses.push(person1);
+      }
+    }
   });
 
   // Find root candidates (people with no parents in the tree)
-  const roots: (Person & { children: Person[] })[] = [];
+  const roots: any[] = [];
   const processedIds = new Set<string>();
 
   people.forEach(person => {
@@ -234,6 +358,11 @@ function createHierarchy(people: Person[]): Person & { children?: Person[] } {
     if (!hasParentsInTree && !processedIds.has(person.id)) {
       roots.push(personWithChildren);
       processedIds.add(person.id);
+      
+      // Also exclude their spouses from being roots since they'll be shown with this person
+      personWithChildren.spouses.forEach((spouse: any) => {
+        processedIds.add(spouse.id);
+      });
     }
   });
 
@@ -250,16 +379,33 @@ function createHierarchy(people: Person[]): Person & { children?: Person[] } {
 
   // If we have multiple roots, create a virtual root
   if (roots.length > 1) {
-    return {
+    const virtualRoot: any = {
       id: 'virtual-root',
+      family_tree_id: people[0]?.family_tree_id || '',
       first_name: 'Family Tree',
       last_name: '',
-      children: roots
-    } as Person & { children: Person[] };
+      maiden_name: null,
+      nickname: null,
+      gender: 'O',
+      birth_date: null,
+      birth_place: null,
+      death_date: null,
+      death_place: null,
+      is_living: true,
+      notes: null,
+      father_id: null,
+      mother_id: null,
+      photo_path: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      children: roots,
+      spouses: []
+    };
+    return virtualRoot;
   } else if (roots.length === 1) {
     return roots[0];
   } else {
     // If no clear roots (circular references), just take the first person
-    return personMap.get(people[0].id) || { ...people[0], children: [] };
+    return personMap.get(people[0].id) || { ...people[0], children: [], spouses: [] };
   }
 }

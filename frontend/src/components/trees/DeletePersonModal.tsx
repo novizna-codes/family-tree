@@ -19,8 +19,7 @@ export function DeletePersonModal({ isOpen, onClose, person, treeId }: DeletePer
     mutationFn: () => treeService.deletePerson(treeId, person.id),
     onSuccess: () => {
       toast.success('Person deleted successfully!');
-      queryClient.invalidateQueries({ queryKey: ['people', treeId] });
-      queryClient.invalidateQueries({ queryKey: ['tree-visualization', treeId] });
+      queryClient.invalidateQueries({ queryKey: ['tree', treeId] });
       onClose();
     },
     onError: (error: Error) => {

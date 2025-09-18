@@ -11,7 +11,9 @@ class SetupController extends Controller
 {
     public function checkSetup()
     {
-        $hasAdminUser = User::role(RoleEnum::ADMIN->value)->exists();
+        $hasAdminUser = User::whereHas('roles', function($query) {
+            $query->where('name', RoleEnum::ADMIN->value);
+        })->exists();
         
         return response()->json([
             'needs_setup' => !$hasAdminUser,
@@ -22,7 +24,9 @@ class SetupController extends Controller
     public function createInitialAdmin(Request $request)
     {
         // Check if admin already exists
-        if (User::role(RoleEnum::ADMIN->value)->exists()) {
+        if (User::whereHas('roles', function($query) {
+            $query->where('name', RoleEnum::ADMIN->value);
+        })->exists()) {
             return response()->json([
                 'message' => 'Admin user already exists.',
             ], 400);

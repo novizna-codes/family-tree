@@ -61,9 +61,7 @@ export function PersonEditModal({ isOpen, onClose, person, treeId }: PersonEditM
     },
     onSuccess: () => {
       toast.success('Person updated successfully!');
-      queryClient.invalidateQueries({ queryKey: ['people', treeId] });
-      queryClient.invalidateQueries({ queryKey: ['person', treeId, person.id] });
-      queryClient.invalidateQueries({ queryKey: ['tree-visualization', treeId] });
+      queryClient.invalidateQueries({ queryKey: ['tree', treeId] });
       onClose();
     },
     onError: (error: Error) => {

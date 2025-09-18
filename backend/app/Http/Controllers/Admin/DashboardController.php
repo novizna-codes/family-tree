@@ -13,7 +13,9 @@ class DashboardController extends Controller
     public function index()
     {
         $totalUsers = User::count();
-        $totalAdmins = User::where('role', 'admin')->count();
+        $totalAdmins = User::whereHas('roles', function($query) {
+            $query->where('name', 'admin');
+        })->count();
         $totalTrees = FamilyTree::count();
         $totalPersons = Person::count();
         

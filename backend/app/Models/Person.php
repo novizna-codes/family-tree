@@ -90,6 +90,16 @@ class Person extends Model
         return $this->hasMany(Relationship::class, 'person2_id');
     }
 
+    public function getAllSpouseRelationships()
+    {
+        return Relationship::where('family_tree_id', $this->family_tree_id)
+            ->where('relationship_type', 'spouse')
+            ->where(function ($query) {
+                $query->where('person1_id', $this->id)
+                      ->orWhere('person2_id', $this->id);
+            });
+    }
+
     public function getAllRelationships()
     {
         return Relationship::where('family_tree_id', $this->family_tree_id)
@@ -101,7 +111,7 @@ class Person extends Model
 
     public function spouses()
     {
-        $relationships = $this->spouseRelationships;
+        $relationships = $this->getAllSpouseRelationships()->get();
         $spouseIds = $relationships->map(function ($rel) {
             return $rel->person1_id === $this->id ? $rel->person2_id : $rel->person1_id;
         });
