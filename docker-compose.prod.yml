@@ -28,7 +28,7 @@ services:
 
   # Laravel Backend
   backend:
-    image: ghcr.io/novizna-public/familly-tree/backend:${IMAGE_TAG:-latest}
+    image: kirito70/family-tree-backend:${IMAGE_TAG:-latest}
     container_name: family-tree-backend-prod
     restart: always
     ports:
@@ -84,7 +84,7 @@ services:
 
   # React Frontend
   frontend:
-    image: ghcr.io/novizna-public/familly-tree/frontend:${IMAGE_TAG:-latest}
+    image: kirito70/family-tree-frontend:${IMAGE_TAG:-latest}
     container_name: family-tree-frontend-prod
     restart: always
     ports:

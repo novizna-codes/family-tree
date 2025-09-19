@@ -21,7 +21,7 @@ The frontend is built as a production-ready Docker image that can be configured 
 docker run -p 3000:80 \
   -e VITE_API_URL=http://your-backend:8000 \
   -e VITE_APP_NAME="My Family Tree" \
-  ghcr.io/your-username/family-tree-frontend:latest
+  kirito70/family-tree-frontend:latest
 ```
 
 #### Using Docker Compose:
@@ -29,7 +29,7 @@ docker run -p 3000:80 \
 ```yaml
 services:
   frontend:
-    image: ghcr.io/your-username/family-tree-frontend:latest
+    image: kirito70/family-tree-frontend:latest
     ports:
       - "3000:80"
     environment:
