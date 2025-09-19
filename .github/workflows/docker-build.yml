@@ -18,8 +18,8 @@ on:
         type: boolean
 env:
   REGISTRY: ghcr.io
-  IMAGE_BACKEND: ghcr.io/novizna-public/familly-tree/backend
-  IMAGE_FRONTEND: ghcr.io/novizna-public/familly-tree/frontend
+  IMAGE_BACKEND: ghcr.io/novizna-public/family-tree/backend
+  IMAGE_FRONTEND: ghcr.io/novizna-public/family-tree/frontend
 
 jobs:
   build-and-push:
@@ -122,4 +122,4 @@ jobs:
         echo "**Frontend Image**: \`${{ env.IMAGE_FRONTEND }}\`" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Registry**: GitHub Container Registry (GHCR)" >> $GITHUB_STEP_SUMMARY
-        echo "**Repository**: novizna-public/familly-tree" >> $GITHUB_STEP_SUMMARY
+        echo "**Repository**: novizna-public/family-tree" >> $GITHUB_STEP_SUMMARY

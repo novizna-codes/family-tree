@@ -36,7 +36,7 @@ A comprehensive web application for creating and managing family genealogies wit
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/novizna-codes/family-tree.git
-   cd familly-tree
+   cd family-tree
    ```
 
 2. **Run the development setup script**:
@@ -173,8 +173,8 @@ The project includes automated Docker image building and publishing to GitHub Co
 
 1. **Manual Trigger**: Go to Actions tab → "Build and Push Docker Images to GHCR" → "Run workflow"
 2. **Images are published to**:
-   - `ghcr.io/novizna-public/familly-tree/backend:latest`
-   - `ghcr.io/novizna-public/familly-tree/frontend:latest`
+   - `ghcr.io/novizna-public/family-tree/backend:latest`
+   - `ghcr.io/novizna-public/family-tree/frontend:latest`
 
 ### Production Deployment
 
@@ -273,7 +273,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 For support, please:
-1. Search existing [issues](https://github.com/novizna-codes/familly-tree/issues)
+1. Search existing [issues](https://github.com/novizna-codes/family-tree/issues)
 2. Create a new issue if needed
 
 ## 🗺️ Roadmap
