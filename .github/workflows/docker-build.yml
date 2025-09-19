@@ -19,8 +19,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_BACKEND: ghcr.io/${{ github.repository }}/backend
-  IMAGE_FRONTEND: ghcr.io/${{ github.repository }}/frontend
+  IMAGE_BACKEND: ghcr.io/novizna-public/familly-tree/backend
+  IMAGE_FRONTEND: ghcr.io/novizna-public/familly-tree/frontend
 
 jobs:
   build-and-push:

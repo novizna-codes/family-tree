@@ -12,7 +12,7 @@ services:
       MYSQL_USER: family_tree_user
       MYSQL_PASSWORD: family_tree_password
     ports:
-      - "3306:3306"
+      - "3309:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -84,7 +84,7 @@ services:
     container_name: family-tree-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6378:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -100,7 +100,7 @@ services:
     container_name: family-tree-phpmyadmin
     restart: unless-stopped
     ports:
-      - "8081:80"
+      - "8082:80"
     environment:
       PMA_HOST: db
       PMA_USER: family_tree_user
@@ -116,8 +116,8 @@ services:
     container_name: family-tree-mailhog
     restart: unless-stopped
     ports:
-      - "8025:8025"  # Web UI
-      - "1025:1025"  # SMTP
+      - "8026:8025"  # Web UI
+      - "1026:1025"  # SMTP
     networks:
       - family-tree-network
 
