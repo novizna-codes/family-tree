@@ -190,7 +190,7 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
 }
 
 // Helper function to calculate family context for navigation
-function calculateFamilyContext(people: Person[], relationships: Relationship[], rootTrees: any[]): FamilyContext {
+function calculateFamilyContext(_people: Person[], _relationships: Relationship[], rootTrees: any[]): FamilyContext {
   const availableFamilies: FamilyContext['availableFamilies'] = [];
   
   // For each root tree, find the main person and their spouses
@@ -262,97 +262,6 @@ function calculateFamilyContext(people: Person[], relationships: Relationship[],
   };
 }
 
-// Helper function to create hierarchy from flat array of people with spouse relationships
-function createHierarchy(people: Person[], relationships: Relationship[] = []): any {
-  if (people.length === 0) {
-    return { 
-      id: '', 
-      family_tree_id: '',
-      first_name: 'Empty', 
-      last_name: null,
-      maiden_name: null,
-      nickname: null,
-      gender: null,
-      birth_date: null,
-      death_date: null,
-      birth_place: null,
-      death_place: null,
-      is_living: true,
-      father_id: null,
-      mother_id: null,
-      photo_path: null,
-      notes: null,
-      created_at: '',
-      updated_at: '',
-      children: [],
-      spouses: []
-    } as any;
-  }
-
-  // Create a map for quick lookup
-  const personMap = new Map<string, any>();
-  
-  // Initialize all people in the map with children and spouses arrays
-  people.forEach(person => {
-    personMap.set(person.id, { ...person, children: [], spouses: [] });
-  });
-
-  // Build spouse relationships
-  relationships.forEach(relationship => {
-    if (relationship.relationship_type === 'spouse') {
-      const person1 = personMap.get(relationship.person1_id);
-      const person2 = personMap.get(relationship.person2_id);
-      
-      if (person1 && person2) {
-        // Add each as spouse of the other
-        person1.spouses.push(person2);
-        person2.spouses.push(person1);
-      }
-    }
-  });
-
-  // Find root candidates (people with no parents in the tree)
-  const roots: any[] = [];
-  const processedIds = new Set<string>();
-
-  people.forEach(person => {
-    const personWithChildren = personMap.get(person.id)!;
-    
-    // Check if this person has parents in the tree
-    const hasParentsInTree = people.some(p => 
-      p.id === person.father_id || p.id === person.mother_id
-    );
-
-    if (!hasParentsInTree && !processedIds.has(person.id)) {
-      roots.push(personWithChildren);
-      processedIds.add(person.id);
-      
-      // Also exclude their spouses from being roots since they'll be shown with this person
-      personWithChildren.spouses.forEach((spouse: any) => {
-        processedIds.add(spouse.id);
-      });
-    }
-  });
-
-  // Build parent-child relationships
-  people.forEach(person => {
-    // Find children for this person
-    const children = people.filter(p => 
-      p.father_id === person.id || p.mother_id === person.id
-    );
-    
-    const personWithChildren = personMap.get(person.id)!;
-    personWithChildren.children = children.map(child => personMap.get(child.id)!);
-  });
-
-  // Return multiple roots or single root without virtual parent
-  if (roots.length >= 1) {
-    return roots[0]; // For now, return first root (will enhance to forest layout next)
-  } else {
-    // If no clear roots (circular references), just take the first person
-    return personMap.get(people[0].id) || { ...people[0], children: [], spouses: [] };
-  }
-}
 
 // Helper function to create multiple hierarchies for forest layout
 function createMultipleHierarchies(people: Person[], relationships: Relationship[] = []): any[] {
@@ -392,7 +301,7 @@ function createMultipleHierarchies(people: Person[], relationships: Relationship
   });
 
   // Find connected components (groups of people connected by any relationships)
-  const connectedComponents = findConnectedComponents(people, relationships, personMap);
+  const connectedComponents = findConnectedComponents(people, relationships);
 
   // For each connected component, create a unified tree structure
   const roots: any[] = connectedComponents.map(component => {
@@ -466,7 +375,7 @@ function findAllDescendants(person: any, componentIds: Set<string>, visited = ne
 }
 
 // Helper function to count spouse connections from a lineage
-function countSpouseConnections(root: Person, relationships: Relationship[], componentIds: Set<string>): number {
+function countSpouseConnections(_root: Person, relationships: Relationship[], componentIds: Set<string>): number {
   let count = 0;
   
   relationships.forEach(rel => {
@@ -481,135 +390,18 @@ function countSpouseConnections(root: Person, relationships: Relationship[], com
   return count;
 }
 
-// Helper function to find spouse connections between different lineages
-function findSpouseConnectionsBetweenLineages(roots: Person[], relationships: Relationship[], personMap: Map<string, any>): any[] {
-  const connections: any[] = [];
-  
-  relationships.forEach(rel => {
-    if (rel.relationship_type === 'spouse') {
-      const person1 = personMap.get(rel.person1_id);
-      const person2 = personMap.get(rel.person2_id);
-      
-      if (person1 && person2) {
-        // Check if these spouses belong to different lineages
-        const lineage1 = findLineageRoot(person1, roots);
-        const lineage2 = findLineageRoot(person2, roots);
-        
-        if (lineage1 && lineage2 && lineage1.id !== lineage2.id) {
-          connections.push({
-            spouse1: person1,
-            spouse2: person2,
-            lineage1,
-            lineage2,
-            relationship: rel
-          });
-        }
-      }
-    }
-  });
-  
-  return connections;
-}
 
-// Helper function to find which lineage a person belongs to
-function findLineageRoot(person: any, roots: Person[]): Person | null {
-  // Check if person is directly a root
-  if (roots.some(root => root.id === person.id)) {
-    return roots.find(root => root.id === person.id)!;
-  }
-  
-  // Traverse up to find which root this person descends from
-  function findAncestorRoot(currentPerson: any, visited = new Set<string>()): Person | null {
-    if (visited.has(currentPerson.id)) return null;
-    visited.add(currentPerson.id);
-    
-    // Check parents
-    if (currentPerson.father_id) {
-      const father = roots.find(root => root.id === currentPerson.father_id);
-      if (father) return father;
-      
-      // Recursively check father's lineage
-      const fatherPerson = { father_id: currentPerson.father_id };
-      const result = findAncestorRoot(fatherPerson, visited);
-      if (result) return result;
-    }
-    
-    if (currentPerson.mother_id) {
-      const mother = roots.find(root => root.id === currentPerson.mother_id);
-      if (mother) return mother;
-      
-      // Recursively check mother's lineage
-      const motherPerson = { mother_id: currentPerson.mother_id };
-      const result = findAncestorRoot(motherPerson, visited);
-      if (result) return result;
-    }
-    
-    return null;
-  }
-  
-  return findAncestorRoot(person);
-}
 
-// Helper function to create a cross-lineage tree structure
-function createCrossLineageTree(roots: Person[], spouseConnections: any[], personMap: Map<string, any>, componentIds: Set<string>): any {
-  // Find the primary spouse connection (for now, use the first one)
-  const primaryConnection = spouseConnections[0];
-  
-  if (!primaryConnection) {
-    // Fallback to first root if no connections
-    return personMap.get(roots[0].id)!;
-  }
-  
-  // Choose the lineage with the most generations as the primary structure
-  const lineage1Depth = calculateLineageDepth(primaryConnection.lineage1, personMap);
-  const lineage2Depth = calculateLineageDepth(primaryConnection.lineage2, personMap);
-  
-  const primaryLineage = lineage1Depth >= lineage2Depth ? primaryConnection.lineage1 : primaryConnection.lineage2;
-  const secondaryLineage = lineage1Depth >= lineage2Depth ? primaryConnection.lineage2 : primaryConnection.lineage1;
-  
-  // Use the primary lineage root as the main structure
-  const mainTree = personMap.get(primaryLineage.id)!;
-  
-  // The secondary lineage will be connected via spouse relationships
-  // This is handled in the tree rendering where spouses are shown horizontally
-  return mainTree;
-}
 
-// Helper function to calculate lineage depth
-function calculateLineageDepth(root: Person, personMap: Map<string, any>): number {
-  function getDepth(person: any, depth = 0): number {
-    if (!person.children || person.children.length === 0) {
-      return depth;
-    }
-    
-    let maxChildDepth = depth;
-    person.children.forEach((child: any) => {
-      const childDepth = getDepth(child, depth + 1);
-      maxChildDepth = Math.max(maxChildDepth, childDepth);
-    });
-    
-    return maxChildDepth;
-  }
-  
-  return getDepth(personMap.get(root.id)!);
-}
 
-// Helper function to count descendants
-function countDescendants(person: any, visited = new Set<string>()): number {
-  if (visited.has(person.id)) return 0;
-  visited.add(person.id);
-  
-  let count = person.children ? person.children.length : 0;
-  if (person.children) {
-    person.children.forEach((child: any) => {
-      count += countDescendants(child, visited);
-    });
-  }
-  return count;
-}
+
+
+
+
+
 
 // Helper function to find connected components in the family graph
-function findConnectedComponents(people: Person[], relationships: Relationship[], personMap: Map<string, any>): Person[][] {
+function findConnectedComponents(people: Person[], relationships: Relationship[]): Person[][] {
   const visited = new Set<string>();
   const components: Person[][] = [];
 
