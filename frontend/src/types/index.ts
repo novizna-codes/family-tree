@@ -224,3 +224,88 @@ export interface UserFormData {
   timezone?: string;
   date_format?: string;
 }
+
+// Advanced Tree Visualization Types
+export interface TreeNode {
+  id: string;
+  person: Person & {
+    full_name: string;
+    age: number | null;
+    is_living: boolean;
+  };
+  generation: number;
+  children: TreeNode[];
+  spouses: SpouseNode[];
+  parents: ParentNode[];
+  siblings: SiblingNode[];
+  relationships: RelationshipNode[];
+  is_reference?: boolean; // For avoiding infinite loops
+}
+
+export interface SpouseNode {
+  id: string;
+  person: Person & {
+    full_name: string;
+  };
+  relationship: {
+    id: string;
+    person_id: string;
+    type: string;
+    start_date: string | null;
+    end_date: string | null;
+    marriage_place: string | null;
+    notes: string | null;
+    is_current: boolean;
+    duration_years: number | null;
+  };
+}
+
+export interface ParentNode {
+  id: string;
+  person: Person & {
+    full_name: string;
+  };
+  type: 'father' | 'mother';
+}
+
+export interface SiblingNode {
+  id: string;
+  person: Person & {
+    full_name: string;
+  };
+}
+
+export interface RelationshipNode {
+  person_id: string;
+  category: 'spouse' | 'sibling' | 'child' | 'parent';
+  details: any;
+}
+
+export interface TreeStructure {
+  roots: TreeNode[];
+  metadata: {
+    min_generation: number;
+    max_generation: number;
+    total_nodes: number;
+    total_relationships: number;
+    tree_count: number;
+    generation_counts: Record<number, number>;
+    max_depth: number;
+  };
+  relationship_map: Record<string, any[]>;
+  people_map: Record<string, Person>;
+}
+
+export interface CompleteTreeResponse {
+  tree: FamilyTree;
+  structure: TreeStructure;
+  focus_person_id: string | null;
+  stats: {
+    total_people: number;
+    total_relationships: number;
+    generations_span: number;
+    tree_count: number;
+    unified_tree?: boolean;
+  };
+  people_map?: Record<string, Person>; // Add this for the person filter
+}

@@ -31,6 +31,7 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
+            $table->unique('id');
             $table->foreign('father_id')->references('id')->on('people')->onDelete('set null');
             $table->foreign('mother_id')->references('id')->on('people')->onDelete('set null');
 

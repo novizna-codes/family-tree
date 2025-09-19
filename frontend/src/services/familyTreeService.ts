@@ -1,8 +1,8 @@
 import { api } from './api';
-import type { FamilyTree, Person } from '@/types';
+import type { FamilyTree, Person, CompleteTreeResponse } from '@/types';
 
 // Re-export main types for convenience
-export type { FamilyTree, Person } from '@/types';
+export type { FamilyTree, Person, CompleteTreeResponse } from '@/types';
 
 export interface CreateFamilyTreeData {
   name: string;
@@ -198,6 +198,15 @@ class FamilyTreeService {
     const params = focusPersonId ? { focus_person_id: focusPersonId } : {};
     const response = await api.get<{ data: FamilyTreeVisualizationData }>(`/trees/${treeId}/visualization`, { params });
     return response.data;
+  }
+
+  async getCompleteTree(treeId: string, focusPersonId?: string, maxGenerations?: number): Promise<CompleteTreeResponse> {
+    const params: Record<string, any> = {};
+    if (focusPersonId) params.focus_person_id = focusPersonId;
+    if (maxGenerations) params.max_generations = maxGenerations;
+    
+    const response = await api.get<{ data: CompleteTreeResponse }>(`/trees/${treeId}/complete-tree`, { params });
+    return response.data.data; // Extract from nested data structure
   }
 
   async exportTree(treeId: string, format: string = 'json'): Promise<any> {

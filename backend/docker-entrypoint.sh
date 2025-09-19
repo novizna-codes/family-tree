@@ -10,7 +10,7 @@ echo -e "${BLUE}[BACKEND]${NC} Starting Family Tree Builder Backend initializati
 
 # Wait for database to be ready
 echo -e "${BLUE}[BACKEND]${NC} Waiting for database connection..."
-while ! mysqladmin ping -h"${DB_HOST:-mysql}" -P"${DB_PORT:-3306}" -u"${DB_USERNAME:-family_tree}" -p"${DB_PASSWORD:-family_tree_password}" --silent; do
+while ! mysql -h"${DB_HOST:-db}" -P"${DB_PORT:-3306}" -u"${DB_USERNAME:-family_tree_user}" -p"${DB_PASSWORD:-family_tree_password}" -e "SELECT 1" > /dev/null 2>&1; do
     echo -e "${BLUE}[BACKEND]${NC} Database not ready, waiting..."
     sleep 2
 done

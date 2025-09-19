@@ -11,6 +11,7 @@ import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { SetupPage } from '@/pages/auth/SetupPage';
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 import { TreeViewPage } from '@/pages/trees/TreeViewPage';
+import { AdvancedTreeViewPage } from '@/pages/trees/AdvancedTreeViewPage';
 import { AddPersonPage } from '@/pages/trees/AddPersonPage';
 
 // Admin Pages
@@ -67,6 +68,16 @@ export const router = createBrowserRouter([
       <SetupGuard>
         <AuthGuard>
           <TreeViewPage />
+        </AuthGuard>
+      </SetupGuard>
+    ),
+  },
+  {
+    path: '/trees/:id/advanced',
+    element: (
+      <SetupGuard>
+        <AuthGuard>
+          <AdvancedTreeViewPage />
         </AuthGuard>
       </SetupGuard>
     ),

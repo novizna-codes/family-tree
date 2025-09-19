@@ -48,6 +48,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/trees/{familyTree}', [FamilyTreeController::class, 'update']);
     Route::delete('/trees/{familyTree}', [FamilyTreeController::class, 'destroy']);
     Route::get('/trees/{familyTree}/visualization', [FamilyTreeController::class, 'visualization']);
+    Route::get('/trees/{familyTree}/complete-tree', [FamilyTreeController::class, 'completeTree']);
     Route::get('/trees/{familyTree}/export', [FamilyTreeController::class, 'export']);
 
     // People routes

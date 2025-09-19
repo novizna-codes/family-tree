@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeftIcon, UserPlusIcon, PresentationChartLineIcon, ListBulletIcon, LinkIcon, PrinterIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ChevronLeftIcon, UserPlusIcon, PresentationChartLineIcon, ListBulletIcon, LinkIcon, PrinterIcon, PencilIcon, TrashIcon, CogIcon } from '@heroicons/react/24/outline';
 import { treeService } from '@/services/treeService';
 import { TreeVisualization } from '@/components/trees/TreeVisualization';
 import { RelationshipModal } from '@/components/trees/RelationshipModal';
@@ -175,6 +175,16 @@ export const TreeViewPage: React.FC = () => {
                     Tree View
                   </button>
                 </div>
+              )}
+
+              {/* Advanced View Button */}
+              {people.length > 0 && (
+                <Link to={`/trees/${id}/advanced`}>
+                  <Button variant="outline">
+                    <CogIcon className="h-4 w-4 mr-2" />
+                    Advanced View
+                  </Button>
+                </Link>
               )}
 
               {/* Print Button */}

@@ -36,9 +36,9 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
   const svgRef = useRef<SVGSVGElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [rootTreesCount, setRootTreesCount] = useState(1);
-  const [familyContext, setFamilyContext] = useState<FamilyContext>({ 
-    currentPerson: null, 
-    availableFamilies: [] 
+  const [familyContext, setFamilyContext] = useState<FamilyContext>({
+    currentPerson: null,
+    availableFamilies: []
   });
   const [showFamilySelector, setShowFamilySelector] = useState(false);
 
@@ -95,7 +95,7 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
         className="border border-gray-200 rounded-lg bg-white"
       >
       </svg>
-      
+
       {/* Controls */}
       <div className="absolute top-4 right-4 flex gap-2">
         {familyContext.availableFamilies.length > 1 && (
@@ -119,7 +119,7 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
           Reset View
         </button>
       </div>
-      
+
       {/* Family Selector Modal */}
       {showFamilySelector && (
         <div className="absolute top-16 right-4 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-10 min-w-64">
@@ -155,7 +155,7 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
           </div>
         </div>
       )}
-      
+
       {/* Legend */}
       <div className="absolute bottom-4 left-4 bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
         <div className="text-sm font-medium text-gray-900 mb-2">Legend</div>
@@ -190,9 +190,9 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
 }
 
 // Helper function to calculate family context for navigation
-function calculateFamilyContext(people: Person[], relationships: Relationship[], rootTrees: any[]): FamilyContext {
+function calculateFamilyContext(_people: Person[], _relationships: Relationship[], rootTrees: any[]): FamilyContext {
   const availableFamilies: FamilyContext['availableFamilies'] = [];
-  
+
   // For each root tree, find the main person and their spouses
   rootTrees.forEach(tree => {
     // Add the tree's root person
@@ -202,15 +202,17 @@ function calculateFamilyContext(people: Person[], relationships: Relationship[],
       relation: 'self',
       familySize
     });
-    
+
     // Add spouse families if they exist in other trees
     if (tree.spouses && tree.spouses.length > 0) {
       tree.spouses.forEach((spouse: any) => {
         // Check if spouse has their own family tree
-        const spouseFamilyTree = rootTrees.find(otherTree => 
+        const spouseFamilyTree = rootTrees.find(otherTree =>
           otherTree.id !== tree.id && hasPersonInTree(otherTree, spouse.id)
         );
-        
+
+        console.log(spouseFamilyTree)
+
         if (spouseFamilyTree) {
           const spouseFamilySize = countFamilyMembers(spouseFamilyTree);
           availableFamilies.push({
@@ -226,7 +228,7 @@ function calculateFamilyContext(people: Person[], relationships: Relationship[],
   function countFamilyMembers(tree: any): number {
     let count = 1; // Count the root
     count += tree.spouses ? tree.spouses.length : 0; // Count spouses
-    
+
     // Recursively count children
     function countChildren(person: any): number {
       if (!person.children || person.children.length === 0) return 0;
@@ -237,11 +239,11 @@ function calculateFamilyContext(people: Person[], relationships: Relationship[],
       });
       return childCount;
     }
-    
+
     count += countChildren(tree);
     return count;
   }
-  
+
   function hasPersonInTree(tree: any, personId: string): boolean {
     if (tree.id === personId) return true;
     if (tree.spouses && tree.spouses.some((spouse: any) => spouse.id === personId)) return true;
@@ -252,7 +254,7 @@ function calculateFamilyContext(people: Person[], relationships: Relationship[],
   }
 
   // Remove duplicates based on person ID
-  const uniqueFamilies = availableFamilies.filter((family, index, arr) => 
+  const uniqueFamilies = availableFamilies.filter((family, index, arr) =>
     arr.findIndex(f => f.person.id === family.person.id) === index
   );
 
@@ -263,96 +265,7 @@ function calculateFamilyContext(people: Person[], relationships: Relationship[],
 }
 
 // Helper function to create hierarchy from flat array of people with spouse relationships
-function createHierarchy(people: Person[], relationships: Relationship[] = []): any {
-  if (people.length === 0) {
-    return { 
-      id: '', 
-      family_tree_id: '',
-      first_name: 'Empty', 
-      last_name: null,
-      maiden_name: null,
-      nickname: null,
-      gender: null,
-      birth_date: null,
-      death_date: null,
-      birth_place: null,
-      death_place: null,
-      is_living: true,
-      father_id: null,
-      mother_id: null,
-      photo_path: null,
-      notes: null,
-      created_at: '',
-      updated_at: '',
-      children: [],
-      spouses: []
-    } as any;
-  }
-
-  // Create a map for quick lookup
-  const personMap = new Map<string, any>();
-  
-  // Initialize all people in the map with children and spouses arrays
-  people.forEach(person => {
-    personMap.set(person.id, { ...person, children: [], spouses: [] });
-  });
-
-  // Build spouse relationships
-  relationships.forEach(relationship => {
-    if (relationship.relationship_type === 'spouse') {
-      const person1 = personMap.get(relationship.person1_id);
-      const person2 = personMap.get(relationship.person2_id);
-      
-      if (person1 && person2) {
-        // Add each as spouse of the other
-        person1.spouses.push(person2);
-        person2.spouses.push(person1);
-      }
-    }
-  });
-
-  // Find root candidates (people with no parents in the tree)
-  const roots: any[] = [];
-  const processedIds = new Set<string>();
-
-  people.forEach(person => {
-    const personWithChildren = personMap.get(person.id)!;
-    
-    // Check if this person has parents in the tree
-    const hasParentsInTree = people.some(p => 
-      p.id === person.father_id || p.id === person.mother_id
-    );
-
-    if (!hasParentsInTree && !processedIds.has(person.id)) {
-      roots.push(personWithChildren);
-      processedIds.add(person.id);
-      
-      // Also exclude their spouses from being roots since they'll be shown with this person
-      personWithChildren.spouses.forEach((spouse: any) => {
-        processedIds.add(spouse.id);
-      });
-    }
-  });
-
-  // Build parent-child relationships
-  people.forEach(person => {
-    // Find children for this person
-    const children = people.filter(p => 
-      p.father_id === person.id || p.mother_id === person.id
-    );
-    
-    const personWithChildren = personMap.get(person.id)!;
-    personWithChildren.children = children.map(child => personMap.get(child.id)!);
-  });
-
-  // Return multiple roots or single root without virtual parent
-  if (roots.length >= 1) {
-    return roots[0]; // For now, return first root (will enhance to forest layout next)
-  } else {
-    // If no clear roots (circular references), just take the first person
-    return personMap.get(people[0].id) || { ...people[0], children: [], spouses: [] };
-  }
-}
+// Note: This function was removed in favor of server-side tree building in Advanced Tree Visualization
 
 // Helper function to create multiple hierarchies for forest layout
 function createMultipleHierarchies(people: Person[], relationships: Relationship[] = []): any[] {
@@ -360,7 +273,7 @@ function createMultipleHierarchies(people: Person[], relationships: Relationship
 
   // Create a map for quick lookup
   const personMap = new Map<string, any>();
-  
+
   // Initialize all people in the map with children and spouses arrays
   people.forEach(person => {
     personMap.set(person.id, { ...person, children: [], spouses: [] });
@@ -371,7 +284,7 @@ function createMultipleHierarchies(people: Person[], relationships: Relationship
     if (relationship.relationship_type === 'spouse') {
       const person1 = personMap.get(relationship.person1_id);
       const person2 = personMap.get(relationship.person2_id);
-      
+
       if (person1 && person2) {
         // Add each as spouse of the other
         person1.spouses.push(person2);
@@ -383,10 +296,10 @@ function createMultipleHierarchies(people: Person[], relationships: Relationship
   // Build parent-child relationships first
   people.forEach(person => {
     // Find children for this person
-    const children = people.filter(p => 
+    const children = people.filter(p =>
       p.father_id === person.id || p.mother_id === person.id
     );
-    
+
     const personWithChildren = personMap.get(person.id)!;
     personWithChildren.children = children.map(child => personMap.get(child.id)!);
   });
@@ -405,10 +318,10 @@ function createMultipleHierarchies(people: Person[], relationships: Relationship
 // Helper function to create a unified tree structure for cross-lineage connections
 function createUnifiedTreeStructure(component: Person[], personMap: Map<string, any>, relationships: Relationship[]): any {
   const componentIds = new Set(component.map(p => p.id));
-  
+
   // Find all potential roots (people with no parents in the component)
   const potentialRoots = component.filter(person => {
-    const hasParentsInComponent = componentIds.has(person.father_id || '') || 
+    const hasParentsInComponent = componentIds.has(person.father_id || '') ||
                                  componentIds.has(person.mother_id || '');
     return !hasParentsInComponent;
   });
@@ -424,23 +337,23 @@ function createUnifiedTreeStructure(component: Person[], personMap: Map<string, 
     // Find the root that has the most connected descendants
     let bestRoot = potentialRoots[0];
     let maxConnections = 0;
-    
+
     potentialRoots.forEach(root => {
       // Count how many people in the component are descendants of this root
       const descendants = findAllDescendants(personMap.get(root.id)!, componentIds);
       // Count spouse connections from this lineage
       const spouseConnections = countSpouseConnections(root, relationships, componentIds);
       const totalConnections = descendants.size + spouseConnections;
-      
+
       if (totalConnections > maxConnections) {
         maxConnections = totalConnections;
         bestRoot = root;
       }
     });
-    
+
     return personMap.get(bestRoot.id)!;
   }
-  
+
   // Fallback: first person from component
   return personMap.get(component[0].id)!;
 }
@@ -448,10 +361,10 @@ function createUnifiedTreeStructure(component: Person[], personMap: Map<string, 
 // Helper function to find all descendants of a person within a component
 function findAllDescendants(person: any, componentIds: Set<string>, visited = new Set<string>()): Set<string> {
   const descendants = new Set<string>();
-  
+
   if (visited.has(person.id)) return descendants;
   visited.add(person.id);
-  
+
   if (person.children) {
     person.children.forEach((child: any) => {
       if (componentIds.has(child.id)) {
@@ -461,14 +374,14 @@ function findAllDescendants(person: any, componentIds: Set<string>, visited = ne
       }
     });
   }
-  
+
   return descendants;
 }
 
 // Helper function to count spouse connections from a lineage
-function countSpouseConnections(root: Person, relationships: Relationship[], componentIds: Set<string>): number {
+function countSpouseConnections(_root: Person, relationships: Relationship[], componentIds: Set<string>): number {
   let count = 0;
-  
+
   relationships.forEach(rel => {
     if (rel.relationship_type === 'spouse') {
       const hasPersonInComponent = componentIds.has(rel.person1_id) && componentIds.has(rel.person2_id);
@@ -477,24 +390,25 @@ function countSpouseConnections(root: Person, relationships: Relationship[], com
       }
     }
   });
-  
+
   return count;
 }
 
 // Helper function to find spouse connections between different lineages
-function findSpouseConnectionsBetweenLineages(roots: Person[], relationships: Relationship[], personMap: Map<string, any>): any[] {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _findSpouseConnectionsBetweenLineages(roots: Person[], relationships: Relationship[], personMap: Map<string, any>): any[] {
   const connections: any[] = [];
-  
+
   relationships.forEach(rel => {
     if (rel.relationship_type === 'spouse') {
       const person1 = personMap.get(rel.person1_id);
       const person2 = personMap.get(rel.person2_id);
-      
+
       if (person1 && person2) {
         // Check if these spouses belong to different lineages
         const lineage1 = findLineageRoot(person1, roots);
         const lineage2 = findLineageRoot(person2, roots);
-        
+
         if (lineage1 && lineage2 && lineage1.id !== lineage2.id) {
           connections.push({
             spouse1: person1,
@@ -507,7 +421,7 @@ function findSpouseConnectionsBetweenLineages(roots: Person[], relationships: Re
       }
     }
   });
-  
+
   return connections;
 }
 
@@ -517,59 +431,61 @@ function findLineageRoot(person: any, roots: Person[]): Person | null {
   if (roots.some(root => root.id === person.id)) {
     return roots.find(root => root.id === person.id)!;
   }
-  
+
   // Traverse up to find which root this person descends from
   function findAncestorRoot(currentPerson: any, visited = new Set<string>()): Person | null {
     if (visited.has(currentPerson.id)) return null;
     visited.add(currentPerson.id);
-    
+
     // Check parents
     if (currentPerson.father_id) {
       const father = roots.find(root => root.id === currentPerson.father_id);
       if (father) return father;
-      
+
       // Recursively check father's lineage
       const fatherPerson = { father_id: currentPerson.father_id };
       const result = findAncestorRoot(fatherPerson, visited);
       if (result) return result;
     }
-    
+
     if (currentPerson.mother_id) {
       const mother = roots.find(root => root.id === currentPerson.mother_id);
       if (mother) return mother;
-      
+
       // Recursively check mother's lineage
       const motherPerson = { mother_id: currentPerson.mother_id };
       const result = findAncestorRoot(motherPerson, visited);
       if (result) return result;
     }
-    
+
     return null;
   }
-  
+
   return findAncestorRoot(person);
 }
 
 // Helper function to create a cross-lineage tree structure
-function createCrossLineageTree(roots: Person[], spouseConnections: any[], personMap: Map<string, any>, componentIds: Set<string>): any {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _createCrossLineageTree(roots: Person[], spouseConnections: any[], personMap: Map<string, any>, _componentIds: Set<string>): any {
   // Find the primary spouse connection (for now, use the first one)
   const primaryConnection = spouseConnections[0];
-  
+
   if (!primaryConnection) {
     // Fallback to first root if no connections
     return personMap.get(roots[0].id)!;
   }
-  
+
   // Choose the lineage with the most generations as the primary structure
   const lineage1Depth = calculateLineageDepth(primaryConnection.lineage1, personMap);
   const lineage2Depth = calculateLineageDepth(primaryConnection.lineage2, personMap);
-  
+
   const primaryLineage = lineage1Depth >= lineage2Depth ? primaryConnection.lineage1 : primaryConnection.lineage2;
-  const secondaryLineage = lineage1Depth >= lineage2Depth ? primaryConnection.lineage2 : primaryConnection.lineage1;
-  
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _secondaryLineage = lineage1Depth >= lineage2Depth ? primaryConnection.lineage2 : primaryConnection.lineage1;
+
   // Use the primary lineage root as the main structure
   const mainTree = personMap.get(primaryLineage.id)!;
-  
+
   // The secondary lineage will be connected via spouse relationships
   // This is handled in the tree rendering where spouses are shown horizontally
   return mainTree;
@@ -581,35 +497,36 @@ function calculateLineageDepth(root: Person, personMap: Map<string, any>): numbe
     if (!person.children || person.children.length === 0) {
       return depth;
     }
-    
+
     let maxChildDepth = depth;
     person.children.forEach((child: any) => {
       const childDepth = getDepth(child, depth + 1);
       maxChildDepth = Math.max(maxChildDepth, childDepth);
     });
-    
+
     return maxChildDepth;
   }
-  
+
   return getDepth(personMap.get(root.id)!);
 }
 
 // Helper function to count descendants
-function countDescendants(person: any, visited = new Set<string>()): number {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _countDescendants(person: any, visited = new Set<string>()): number {
   if (visited.has(person.id)) return 0;
   visited.add(person.id);
-  
+
   let count = person.children ? person.children.length : 0;
   if (person.children) {
     person.children.forEach((child: any) => {
-      count += countDescendants(child, visited);
+      count += _countDescendants(child, visited);
     });
   }
   return count;
 }
 
 // Helper function to find connected components in the family graph
-function findConnectedComponents(people: Person[], relationships: Relationship[], personMap: Map<string, any>): Person[][] {
+function findConnectedComponents(people: Person[], relationships: Relationship[], _personMap: Map<string, any>): Person[][] {
   const visited = new Set<string>();
   const components: Person[][] = [];
 
@@ -617,16 +534,16 @@ function findConnectedComponents(people: Person[], relationships: Relationship[]
     if (!visited.has(person.id)) {
       const component: Person[] = [];
       const queue = [person.id];
-      
+
       while (queue.length > 0) {
         const currentId = queue.shift()!;
         if (visited.has(currentId)) continue;
-        
+
         visited.add(currentId);
         const currentPerson = people.find(p => p.id === currentId);
         if (currentPerson) {
           component.push(currentPerson);
-          
+
           // Add connected people to queue
           // 1. Parents (traverse upward)
           if (currentPerson.father_id) {
@@ -641,14 +558,14 @@ function findConnectedComponents(people: Person[], relationships: Relationship[]
               queue.push(mother.id);
             }
           }
-          
+
           // 2. Children (traverse downward)
           people.forEach(p => {
             if ((p.father_id === currentId || p.mother_id === currentId) && !visited.has(p.id)) {
               queue.push(p.id);
             }
           });
-          
+
           // 3. Spouses
           relationships.forEach(rel => {
             if (rel.relationship_type === 'spouse') {
@@ -662,7 +579,7 @@ function findConnectedComponents(people: Person[], relationships: Relationship[]
           });
         }
       }
-      
+
       if (component.length > 0) {
         components.push(component);
       }
@@ -763,14 +680,14 @@ function renderForestLayout(svg: d3.Selection<SVGSVGElement, unknown, null, unde
 function renderTreeElements(g: d3.Selection<SVGGElement, unknown, null, undefined>, treeData: TreeNode, onPersonClick?: (person: Person, event?: any) => void) {
   // Draw spouse connections before regular links
   const spouseConnections: any[] = [];
-  
+
   treeData.descendants().forEach((node: TreeNode) => {
     if (node.data.spouses && node.data.spouses.length > 0) {
       node.data.spouses.forEach((spouse: any, index: number) => {
         // Position spouses horizontally next to the main person
         const spouseX = node.x + (index + 1) * 120; // 120px spacing between spouses
         const spouseY = node.y;
-        
+
         spouseConnections.push({
           person: node.data,
           spouse,
