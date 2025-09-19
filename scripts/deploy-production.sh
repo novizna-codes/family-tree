@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Family Tree Builder - Production Deployment Script
-# This script helps deploy the application using Docker Hub images
+# This script helps deploy the application using GitHub Container Registry images
 
 set -e
 
@@ -85,27 +85,27 @@ set +a
 
 print_success "Prerequisites check completed"
 
-# Login to Docker Hub
-print_status "Logging in to Docker Hub..."
+# Login to GitHub Container Registry
+print_status "Logging in to GitHub Container Registry..."
 
-if [ -n "$DOCKERHUB_TOKEN" ]; then
-    echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-    print_success "Successfully logged in to Docker Hub"
+if [ -n "$GITHUB_TOKEN" ]; then
+    echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+    print_success "Successfully logged in to GHCR"
 else
-    print_warning "DOCKERHUB_TOKEN not set. Attempting to pull public images..."
+    print_warning "GITHUB_TOKEN not set. Attempting to pull public images..."
 fi
 
 # Pull latest images
 print_status "Pulling Docker images..."
-print_status "Repository: kirito70/family-tree"
+print_status "Repository: novizna-public/familly-tree"
 print_status "Tag: $IMAGE_TAG"
 
-docker pull "kirito70/family-tree-backend:$IMAGE_TAG" || {
+docker pull "ghcr.io/novizna-public/familly-tree/backend:$IMAGE_TAG" || {
     print_error "Failed to pull backend image"
     exit 1
 }
 
-docker pull "kirito70/family-tree-frontend:$IMAGE_TAG" || {
+docker pull "ghcr.io/novizna-public/familly-tree/frontend:$IMAGE_TAG" || {
     print_error "Failed to pull frontend image"
     exit 1
 }

@@ -1,4 +1,4 @@
-name: Build and Push Docker Images to Docker Hub
+name: Build and Push Docker Images to GHCR
 
 on:
   workflow_dispatch:
@@ -16,15 +16,17 @@ on:
         required: true
         default: true
         type: boolean
-
 env:
-  REGISTRY: docker.io
-  IMAGE_BACKEND: kirito70/family-tree-backend
-  IMAGE_FRONTEND: kirito70/family-tree-frontend
+  REGISTRY: ghcr.io
+  IMAGE_BACKEND: ghcr.io/novizna-public/familly-tree/backend
+  IMAGE_FRONTEND: ghcr.io/novizna-public/familly-tree/frontend
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
     - name: Checkout code
@@ -33,12 +35,13 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Login to Docker Hub
+    - name: Login to GitHub Container Registry
       if: github.event_name != 'pull_request'
       uses: docker/login-action@v3
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GHCR_TOKEN }}
 
     - name: Extract metadata for Backend
       id: meta-backend
@@ -67,7 +70,7 @@ jobs:
         context: ./backend
         target: production
         platforms: linux/amd64,linux/arm64
-        push: ${{ inputs.push_images }}
+        push: ${{ github.event_name != 'pull_request' && (inputs.push_images != false) }}
         tags: ${{ steps.meta-backend.outputs.tags }}
         labels: ${{ steps.meta-backend.outputs.labels }}
         cache-from: type=gha
@@ -102,7 +105,7 @@ jobs:
         context: ./frontend
         target: production
         platforms: linux/amd64,linux/arm64
-        push: ${{ inputs.push_images }}
+        push: ${{ github.event_name != 'pull_request' && (inputs.push_images != false) }}
         tags: ${{ steps.meta-frontend.outputs.tags }}
         labels: ${{ steps.meta-frontend.outputs.labels }}
         cache-from: type=gha
@@ -110,8 +113,13 @@ jobs:
         build-args: |
           BUILDKIT_INLINE_CACHE=1
 
-    - name: Image digest
+    - name: Summary
       if: github.event_name != 'pull_request'
       run: |
-        echo "Backend image digest: ${{ steps.build-backend.outputs.digest }}"
-        echo "Frontend image digest: ${{ steps.build-frontend.outputs.digest }}"
+        echo "## 🚀 Docker Images Built Successfully" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Backend Image**: \`${{ env.IMAGE_BACKEND }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Frontend Image**: \`${{ env.IMAGE_FRONTEND }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Registry**: GitHub Container Registry (GHCR)" >> $GITHUB_STEP_SUMMARY
+        echo "**Repository**: novizna-public/familly-tree" >> $GITHUB_STEP_SUMMARY

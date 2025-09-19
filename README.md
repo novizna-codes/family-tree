@@ -167,14 +167,14 @@ docker-compose exec frontend npm run lint
 
 ## 📦 Deployment
 
-### Docker Hub
+### GitHub Container Registry
 
-The project includes automated Docker image building and publishing to Docker Hub.
+The project includes automated Docker image building and publishing to GitHub Container Registry (GHCR).
 
-1. **Manual Trigger**: Go to Actions tab → "Build and Push Docker Images to Docker Hub" → "Run workflow"
+1. **Manual Trigger**: Go to Actions tab → "Build and Push Docker Images to GHCR" → "Run workflow"
 2. **Images are published to**:
-   - `kirito70/family-tree-backend:latest`
-   - `kirito70/family-tree-frontend:latest`
+   - `ghcr.io/novizna-public/familly-tree/backend:latest`
+   - `ghcr.io/novizna-public/familly-tree/frontend:latest`
 
 ### Production Deployment
 
