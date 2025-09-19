@@ -273,9 +273,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 For support, please:
-1. Check the [documentation](docs/)
-2. Search existing [issues](https://github.com/kirito70/familly-tree/issues)
-3. Create a new issue if needed
+1. Search existing [issues](https://github.com/novizna-codes/familly-tree/issues)
+2. Create a new issue if needed
 
 ## 🗺️ Roadmap
 
