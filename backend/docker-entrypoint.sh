@@ -19,16 +19,24 @@ DB_USERNAME=${DB_USERNAME:-family_tree}
 DB_PASSWORD=${DB_PASSWORD:-family_tree_password}
 
 if [ "$DB_CONNECTION" = "pgsql" ]; then
-    # PostgreSQL connection check
+    # PostgreSQL connection check using PHP
     echo -e "${BLUE}[BACKEND]${NC} Checking PostgreSQL connection..."
-    until PGPASSWORD="$DB_PASSWORD" pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "${DB_DATABASE:-family_tree}" >/dev/null 2>&1; do
+    until php -r "
+        try {
+            \$pdo = new PDO('pgsql:host=$DB_HOST;port=$DB_PORT;dbname=${DB_DATABASE:-family_tree}', '$DB_USERNAME', '$DB_PASSWORD');
+            \$pdo->query('SELECT 1');
+            exit(0);
+        } catch (Exception \$e) {
+            exit(1);
+        }
+    " >/dev/null 2>&1; do
         echo -e "${BLUE}[BACKEND]${NC} PostgreSQL not ready, waiting..."
         sleep 2
     done
 else
     # MySQL connection check (default)
     echo -e "${BLUE}[BACKEND]${NC} Checking MySQL connection..."
-    while ! mysqladmin ping -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USERNAME" -p"$DB_PASSWORD" --silent; do
+    until mysqladmin ping -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USERNAME" -p"$DB_PASSWORD" --silent; do
         echo -e "${BLUE}[BACKEND]${NC} MySQL not ready, waiting..."
         sleep 2
     done

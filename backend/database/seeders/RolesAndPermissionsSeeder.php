@@ -21,12 +21,12 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // Create permissions from enum
         foreach (PermissionEnum::cases() as $permission) {
-            Permission::create(['name' => $permission->value]);
+            Permission::firstOrCreate(['name' => $permission->value]);
         }
 
         // Create roles from enum
-        $adminRole = Role::create(['name' => RoleEnum::ADMIN->value]);
-        $userRole = Role::create(['name' => RoleEnum::USER->value]);
+        $adminRole = Role::firstOrCreate(['name' => RoleEnum::ADMIN->value]);
+        $userRole = Role::firstOrCreate(['name' => RoleEnum::USER->value]);
 
         // Admin gets all permissions
         $adminRole->givePermissionTo(Permission::all());
