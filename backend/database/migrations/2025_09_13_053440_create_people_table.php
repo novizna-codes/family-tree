@@ -12,8 +12,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('people', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->foreignUuid('family_tree_id')->constrained()->onDelete('cascade');
+            $table->uuid('id');
+            $table->primary('id'); // <= explicit PK
+
+            // If family_trees.id is UUID, keep foreignUuid + constrained('family_trees')
+            // If it's BIGINT, change this to foreignId and match the type.
+            $table->foreignUuid('family_tree_id')
+                  ->constrained('family_trees')
+                  ->cascadeOnDelete();
+
             $table->string('first_name');
             $table->string('last_name')->nullable();
             $table->string('maiden_name')->nullable();
@@ -24,19 +31,25 @@ return new class extends Migration
             $table->date('death_date')->nullable();
             $table->string('birth_place')->nullable();
             $table->string('death_place')->nullable();
+
             $table->uuid('father_id')->nullable();
             $table->uuid('mother_id')->nullable();
+
             $table->string('photo_path')->nullable();
             $table->text('notes')->nullable();
+
             $table->timestamps();
             $table->softDeletes();
 
-            $table->foreign('father_id')->references('id')->on('people')->onDelete('set null');
-            $table->foreign('mother_id')->references('id')->on('people')->onDelete('set null');
-
             $table->index(['family_tree_id', 'first_name']);
-            $table->index(['father_id']);
-            $table->index(['mother_id']);
+            $table->index('father_id');
+            $table->index('mother_id');
+        });
+
+        // Add self-referential FKs AFTER the table (and PK) exists
+        Schema::table('people', function (Blueprint $table) {
+            $table->foreign('father_id')->references('id')->on('people')->nullOnDelete();
+            $table->foreign('mother_id')->references('id')->on('people')->nullOnDelete();
         });
     }
 
