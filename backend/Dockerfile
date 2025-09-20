@@ -6,20 +6,27 @@ RUN apk add --no-cache \
     git \
     curl \
     libpng-dev \
+    libpng \
     libxml2-dev \
     zip \
     unzip \
     mysql-client \
+    postgresql-client \
     nginx \
     supervisor \
     oniguruma-dev \
     libzip-dev \
+    libzip \
     freetype-dev \
+    freetype \
     libjpeg-turbo-dev \
+    libjpeg-turbo \
+    postgresql-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
         pdo \
         pdo_mysql \
+        pdo_pgsql \
         mysqli \
         pcntl \
         gd \
@@ -33,7 +40,8 @@ RUN apk add --no-cache \
         oniguruma-dev \
         libzip-dev \
         freetype-dev \
-        libjpeg-turbo-dev
+        libjpeg-turbo-dev \
+        postgresql-dev
 
 # Install Composer with verification
 COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
@@ -97,12 +105,8 @@ RUN mkdir -p /var/www/html/storage/framework/{cache,sessions,views} \
     && chmod -R 755 /var/www/html/storage \
     && chmod -R 755 /var/www/html/bootstrap/cache
 
-# Generate optimized autoloader and cache configs
-RUN composer dump-autoload --optimize \
-    && php artisan config:cache \
-    && php artisan route:cache \
-    && php artisan view:cache \
-    && php artisan event:cache
+# Generate optimized autoloader only (remove config caching)
+RUN composer dump-autoload --optimize
 
 # Copy configurations
 COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf

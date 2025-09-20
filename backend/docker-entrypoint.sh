@@ -8,12 +8,31 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}[BACKEND]${NC} Starting Family Tree Builder Backend initialization..."
 
-# Wait for database to be ready
+# Wait for database to be ready - support both MySQL and PostgreSQL
 echo -e "${BLUE}[BACKEND]${NC} Waiting for database connection..."
-while ! mysqladmin ping -h"${DB_HOST:-mysql}" -P"${DB_PORT:-3306}" -u"${DB_USERNAME:-family_tree}" -p"${DB_PASSWORD:-family_tree_password}" --silent; do
-    echo -e "${BLUE}[BACKEND]${NC} Database not ready, waiting..."
-    sleep 2
-done
+
+# Default to MySQL settings if not specified
+DB_CONNECTION=${DB_CONNECTION:-mysql}
+DB_HOST=${DB_HOST:-mysql}
+DB_PORT=${DB_PORT:-3306}
+DB_USERNAME=${DB_USERNAME:-family_tree}
+DB_PASSWORD=${DB_PASSWORD:-family_tree_password}
+
+if [ "$DB_CONNECTION" = "pgsql" ]; then
+    # PostgreSQL connection check
+    echo -e "${BLUE}[BACKEND]${NC} Checking PostgreSQL connection..."
+    until PGPASSWORD="$DB_PASSWORD" pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "${DB_DATABASE:-family_tree}" >/dev/null 2>&1; do
+        echo -e "${BLUE}[BACKEND]${NC} PostgreSQL not ready, waiting..."
+        sleep 2
+    done
+else
+    # MySQL connection check (default)
+    echo -e "${BLUE}[BACKEND]${NC} Checking MySQL connection..."
+    while ! mysqladmin ping -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USERNAME" -p"$DB_PASSWORD" --silent; do
+        echo -e "${BLUE}[BACKEND]${NC} MySQL not ready, waiting..."
+        sleep 2
+    done
+fi
 
 echo -e "${GREEN}[BACKEND]${NC} Database connection established!"
 
