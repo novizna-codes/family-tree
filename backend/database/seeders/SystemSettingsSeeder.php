@@ -64,7 +64,7 @@ class SystemSettingsSeeder extends Seeder
         ];
 
         foreach ($defaultSettings as $setting) {
-            SystemSetting::updateOrCreate(
+            SystemSetting::firstOrCreate(
                 ['key' => $setting['key']],
                 [
                     'value' => $setting['value'],
