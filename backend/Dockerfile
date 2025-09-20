@@ -1,60 +1,11 @@
-# Multi-stage build for Laravel Backend
-FROM php:8.2-fpm-alpine AS base
-
-# Install system dependencies and PHP extensions in one layer
-RUN apk add --no-cache \
-    git \
-    curl \
-    libpng-dev \
-    libpng \
-    libxml2-dev \
-    zip \
-    unzip \
-    mysql-client \
-    postgresql-client \
-    nginx \
-    supervisor \
-    oniguruma-dev \
-    libzip-dev \
-    libzip \
-    freetype-dev \
-    freetype \
-    libjpeg-turbo-dev \
-    libjpeg-turbo \
-    postgresql-dev \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) \
-        pdo \
-        pdo_mysql \
-        pdo_pgsql \
-        mysqli \
-        pcntl \
-        gd \
-        xml \
-        zip \
-        mbstring \
-        bcmath \
-    && apk del --no-cache \
-        libpng-dev \
-        libxml2-dev \
-        oniguruma-dev \
-        libzip-dev \
-        freetype-dev \
-        libjpeg-turbo-dev \
-        postgresql-dev
-
-# Install Composer with verification
-COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
-
-# Create app user for security
-RUN addgroup -g 1000 -S appgroup && \
-    adduser -u 1000 -S appuser -G appgroup
+# Multi-stage build for Laravel Backend using serversideup/docker-php
+FROM serversideup/php:8.2-fpm-nginx AS base
 
 # Set working directory
 WORKDIR /var/www/html
 
 # Copy composer files first for better layer caching
-COPY --chown=appuser:appgroup composer.json composer.lock ./
+COPY composer.json composer.lock ./
 
 # Development stage
 FROM base AS development
@@ -63,26 +14,10 @@ FROM base AS development
 RUN composer install --optimize-autoloader --no-progress --no-interaction
 
 # Copy application code
-COPY --chown=appuser:appgroup . .
-
-# Copy and make entrypoint executable
-COPY --chown=appuser:appgroup docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Set permissions
-RUN chown -R appuser:appgroup /var/www/html \
-    && chmod -R 755 /var/www/html/storage \
-    && chmod -R 755 /var/www/html/bootstrap/cache
-
-# Copy configurations
-COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY . .
 
 # Expose port
-EXPOSE 80
-
-# Start with entrypoint
-CMD ["/usr/local/bin/docker-entrypoint.sh"]
+EXPOSE 8080
 
 # Production stage
 FROM base AS production
@@ -91,30 +26,14 @@ FROM base AS production
 RUN composer install --no-dev --optimize-autoloader --no-progress --no-interaction --no-scripts
 
 # Copy application code
-COPY --chown=appuser:appgroup . .
+COPY . .
 
-# Copy and make entrypoint executable
-COPY --chown=appuser:appgroup docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Create required directories and set permissions
-RUN mkdir -p /var/www/html/storage/framework/{cache,sessions,views} \
-    && mkdir -p /var/www/html/storage/logs \
-    && mkdir -p /var/www/html/bootstrap/cache \
-    && chown -R appuser:appgroup /var/www/html \
-    && chmod -R 755 /var/www/html/storage \
-    && chmod -R 755 /var/www/html/bootstrap/cache
-
-# Generate optimized autoloader only (remove config caching)
+# Generate optimized autoloader
 RUN composer dump-autoload --optimize
-
-# Copy configurations
-COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Add health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost/api/health || exit 1
+    CMD curl -f http://localhost:8080/api/health || exit 1
 
 # Labels for better image management
 LABEL org.opencontainers.image.title="Family Tree Backend" \
@@ -122,11 +41,5 @@ LABEL org.opencontainers.image.title="Family Tree Backend" \
       org.opencontainers.image.vendor="Novizna" \
       org.opencontainers.image.source="https://github.com/novizna-codes/family-tree"
 
-# Switch to non-root user
-USER appuser
-
-# Expose port
-EXPOSE 80
-
-# Start with entrypoint
-CMD ["/usr/local/bin/docker-entrypoint.sh"]
+# Expose port (serversideup/docker-php uses 8080 by default)
+EXPOSE 8080
