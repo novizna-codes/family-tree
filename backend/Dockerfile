@@ -22,11 +22,26 @@ EXPOSE 8080
 # Production stage
 FROM base AS production
 
+# Copy application code first
+COPY . .
+
+# Create required directories and set proper permissions (run as root)
+USER root
+RUN mkdir -p /var/www/html/storage/framework/cache \
+    && mkdir -p /var/www/html/storage/framework/sessions \
+    && mkdir -p /var/www/html/storage/framework/views \
+    && mkdir -p /var/www/html/storage/logs \
+    && mkdir -p /var/www/html/bootstrap/cache \
+    && chown -R www-data:www-data /var/www/html/storage \
+    && chown -R www-data:www-data /var/www/html/bootstrap/cache \
+    && chmod -R 755 /var/www/html/storage \
+    && chmod -R 755 /var/www/html/bootstrap/cache
+
+# Switch back to www-data user
+USER www-data
+
 # Install production dependencies only
 RUN composer install --no-dev --optimize-autoloader --no-progress --no-interaction --no-scripts
-
-# Copy application code
-COPY . .
 
 # Generate optimized autoloader
 RUN composer dump-autoload --optimize
