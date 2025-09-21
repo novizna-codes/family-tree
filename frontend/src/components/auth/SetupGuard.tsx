@@ -14,6 +14,7 @@ export const SetupGuard: React.FC<SetupGuardProps> = ({ children }) => {
     const checkSetup = async () => {
       try {
         const { needs_setup } = await setupService.checkSetup();
+        console.log('Setup check result:', needs_setup);
         setNeedsSetup(needs_setup);
       } catch (error) {
         console.error('Setup check failed:', error);
