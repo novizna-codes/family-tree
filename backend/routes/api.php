@@ -26,6 +26,7 @@ Route::get('/setup/check', [SetupController::class, 'checkSetup']);
 Route::post('/setup/admin', [SetupController::class, 'createInitialAdmin']);
 
 // Authentication routes
+Route::get('/auth/registration-status', [AuthController::class, 'registrationStatus']);
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/login', [AuthController::class, 'login']);
 

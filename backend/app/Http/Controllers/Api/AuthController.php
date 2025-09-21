@@ -13,9 +13,16 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    public function registrationStatus()
+    {
+        return response()->json([
+            'enabled' => SystemSetting::get('public_registration_enabled', false),
+        ]);
+    }
+
     public function register(Request $request)
     {
-        if (!SystemSetting::get('public_registration_enabled', true)) {
+        if (!SystemSetting::get('public_registration_enabled', false)) {
             return response()->json([
                 'message' => 'Public registration is currently disabled.',
             ], 403);
