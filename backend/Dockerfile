@@ -7,18 +7,6 @@ WORKDIR /var/www/html
 # Copy composer files first for better layer caching
 COPY composer.json composer.lock ./
 
-# Development stage
-FROM base AS development
-
-# Install all dependencies including dev
-RUN composer install --optimize-autoloader --no-progress --no-interaction
-
-# Copy application code
-COPY . .
-
-# Expose port
-EXPOSE 8080
-
 # Production stage
 FROM base AS production
 
