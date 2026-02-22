@@ -107,6 +107,21 @@ export interface LinkSpouseData {
   notes?: string;
 }
 
+export interface UpdateRelationshipData {
+  relationship_type?: 'spouse' | 'partner' | 'divorced' | 'separated';
+  start_date?: string | null;
+  end_date?: string | null;
+  marriage_place?: string | null;
+  notes?: string | null;
+}
+
+export interface ExportTreeData {
+  tree: FamilyTree;
+  people: Person[];
+  relationships: Relationship[];
+  exported_at: string;
+}
+
 export interface Relationship {
   id: string;
   person1_id: string;
@@ -170,7 +185,7 @@ class FamilyTreeService {
   }
 
   // NEW UNIFIED RELATIONSHIP MANAGEMENT METHODS
-  
+
   /**
    * Create a new person and establish a relationship (replaces addParent, addChild, addSpouse)
    */
@@ -188,10 +203,28 @@ class FamilyTreeService {
   }
 
   /**
+   * Update a relationship's metadata
+   */
+  async updateRelationship(treeId: string, personId: string, relationshipId: string, data: UpdateRelationshipData): Promise<Relationship> {
+    const response = await api.put<{ data: Relationship }>(`/trees/${treeId}/people/${personId}/relationships/${relationshipId}`, data);
+    return response.data;
+  }
+
+  /**
    * Remove any type of relationship (replaces removeSpouse and future relationship removals)
    */
   async removeRelationship(treeId: string, personId: string, relationshipId: string): Promise<void> {
     await api.delete(`/trees/${treeId}/people/${personId}/relationships/${relationshipId}`);
+  }
+
+  /**
+   * Copy a person to another family tree
+   */
+  async copyPerson(treeId: string, personId: string, targetTreeId: string): Promise<Person> {
+    const response = await api.post<{ data: Person }>(`/trees/${treeId}/people/${personId}/copy`, {
+      target_tree_id: targetTreeId,
+    });
+    return response.data;
   }
 
   async getTreeVisualization(treeId: string, focusPersonId?: string): Promise<FamilyTreeVisualizationData> {
@@ -200,11 +233,10 @@ class FamilyTreeService {
     return response.data;
   }
 
-  async exportTree(treeId: string, format: string = 'json'): Promise<any> {
-    const response = await api.get(`/trees/${treeId}/export`, {
+  async exportTree(treeId: string, format: string = 'json'): Promise<ExportTreeData> {
+    return api.get<ExportTreeData>(`/trees/${treeId}/export`, {
       params: { format }
     });
-    return response;
   }
 }
 

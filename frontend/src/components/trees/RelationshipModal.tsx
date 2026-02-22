@@ -40,6 +40,9 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
     marriage_place: '',
     relationship_notes: '',
   });
+  const [parentRole, setParentRole] = useState<'father' | 'mother'>(
+    person.gender === 'F' ? 'mother' : 'father'
+  );
   const queryClient = useQueryClient();
 
   const { data: people = [] } = useQuery({
@@ -58,9 +61,9 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
 
   // Helper function to check if person2 is an ancestor of person1
   const isAncestor = (person1: Person, person2: Person): boolean => {
-    return !!(person1.father_id === person2.id || person1.mother_id === person2.id) ||
-           !!(person1.father && isAncestor(person1.father, person2)) ||
-           !!(person1.mother && isAncestor(person1.mother, person2));
+    return (person1.father_id === person2.id || person1.mother_id === person2.id) ||
+      !!(person1.father && isAncestor(person1.father, person2)) ||
+      !!(person1.mother && isAncestor(person1.mother, person2));
   };
 
   // Filter out current person and already related people
@@ -110,6 +113,7 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
           // Create new child using unified API
           const relationshipData = {
             relationship_type: 'child' as const,
+            parent_role: parentRole, // Re-use the same field for consistency
             ...newPersonData
           };
           // If death_date is empty, also clear death_place
@@ -121,39 +125,40 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
           // Link existing child using unified API
           return treeService.linkExistingRelationship(treeId, person.id, {
             relationship_type: 'child',
-            related_person_id: relatedPersonId!
+            related_person_id: relatedPersonId!,
+            relationship_role: parentRole, // Pass the role of the current person
           });
         }
-        } else if (type === 'spouse') {
-          if (isCreatingNew) {
-            // Create new spouse using unified API
-            const relationshipData = {
-              relationship_type: 'spouse' as const,
-              relationship_role: spouseData.relationship_type,
-              ...newPersonData,
-              start_date: spouseData.start_date,
-              end_date: spouseData.end_date,
-              marriage_place: spouseData.marriage_place,
-              relationship_notes: spouseData.relationship_notes
-            };
-            // If death_date is empty, also clear death_place
-            if (!relationshipData.death_date) {
-              relationshipData.death_place = '';
-            }
-            return treeService.createRelationship(treeId, person.id, relationshipData);
-          } else {
-            // Link existing spouse using unified API
-            return treeService.linkExistingRelationship(treeId, person.id, {
-              relationship_type: 'spouse',
-              relationship_role: spouseData.relationship_type,
-              related_person_id: relatedPersonId!,
-              start_date: spouseData.start_date,
-              end_date: spouseData.end_date,
-              marriage_place: spouseData.marriage_place,
-              relationship_notes: spouseData.relationship_notes
-            });
+      } else if (type === 'spouse') {
+        if (isCreatingNew) {
+          // Create new spouse using unified API
+          const relationshipData = {
+            relationship_type: 'spouse' as const,
+            relationship_role: spouseData.relationship_type,
+            ...newPersonData,
+            start_date: spouseData.start_date,
+            end_date: spouseData.end_date,
+            marriage_place: spouseData.marriage_place,
+            relationship_notes: spouseData.relationship_notes
+          };
+          // If death_date is empty, also clear death_place
+          if (!relationshipData.death_date) {
+            relationshipData.death_place = '';
           }
+          return treeService.createRelationship(treeId, person.id, relationshipData);
+        } else {
+          // Link existing spouse using unified API
+          return treeService.linkExistingRelationship(treeId, person.id, {
+            relationship_type: 'spouse',
+            relationship_role: spouseData.relationship_type,
+            related_person_id: relatedPersonId!,
+            start_date: spouseData.start_date,
+            end_date: spouseData.end_date,
+            marriage_place: spouseData.marriage_place,
+            relationship_notes: spouseData.relationship_notes
+          });
         }
+      }
     },
     onSuccess: () => {
       toast.success('Relationship added successfully!');
@@ -258,31 +263,28 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
           <div className="flex rounded-lg border border-gray-300 overflow-hidden mb-6">
             <button
               onClick={() => handleTabChange('parent')}
-              className={`flex-1 px-3 py-2 text-sm font-medium ${
-                activeTab === 'parent'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
+              className={`flex-1 px-3 py-2 text-sm font-medium ${activeTab === 'parent'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
             >
               Add Parent
             </button>
             <button
               onClick={() => handleTabChange('child')}
-              className={`flex-1 px-3 py-2 text-sm font-medium ${
-                activeTab === 'child'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
+              className={`flex-1 px-3 py-2 text-sm font-medium ${activeTab === 'child'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
             >
               Add Child
             </button>
             <button
               onClick={() => handleTabChange('spouse')}
-              className={`flex-1 px-3 py-2 text-sm font-medium ${
-                activeTab === 'spouse'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
+              className={`flex-1 px-3 py-2 text-sm font-medium ${activeTab === 'spouse'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
             >
               Add Spouse
             </button>
@@ -290,115 +292,111 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
 
           {/* Form Content */}
           <div className="space-y-4">
-          {activeTab === 'spouse' ? (
-            <>
-              {/* Toggle between existing and new person */}
-              <div className="flex rounded-lg border border-gray-300 overflow-hidden mb-4">
-                <button
-                  onClick={() => setIsCreatingNew(false)}
-                  className={`flex-1 px-3 py-2 text-sm font-medium ${
-                    !isCreatingNew
-                      ? 'bg-gray-100 text-gray-900'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Link Existing Person
-                </button>
-                <button
-                  onClick={() => setIsCreatingNew(true)}
-                  className={`flex-1 px-3 py-2 text-sm font-medium ${
-                    isCreatingNew
-                      ? 'bg-gray-100 text-gray-900'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Create New Person
-                </button>
-              </div>
-
-              {isCreatingNew ? (
-                // Form for creating new spouse
-                <div className="space-y-4">
-                  <PersonForm
-                    formData={newPersonData}
-                    onChange={updatePersonData}
-                    disabled={addRelationshipMutation.isPending}
-                    showNotes={false}
-                  />
-
-                  {/* Relationship details */}
-                  <div className="border-t pt-4 mt-4">
-                    <h4 className="text-sm font-medium text-gray-700 mb-3">Relationship Details</h4>
-                    <RelationshipForm
-                      formData={spouseData}
-                      onChange={updateSpouseData}
-                      disabled={addRelationshipMutation.isPending}
-                    />
-                  </div>
-                </div>
-              ) : (
-                // Dropdown for selecting existing person + relationship details
-                <div className="space-y-4">
-                  <Select
-                    label="Select Spouse"
-                    name="spouse_id"
-                    value={selectedPersonId}
-                    onChange={(e) => setSelectedPersonId(e.target.value)}
-                    disabled={addRelationshipMutation.isPending}
-                    options={[
-                      { value: '', label: 'Choose a person...' },
-                      ...availablePeople.map((p) => ({
-                        value: p.id,
-                        label: `${p.first_name} ${p.last_name}${p.birth_date ? ` (${new Date(p.birth_date).getFullYear()})` : ''}`
-                      }))
-                    ]}
-                  />
-
-                  {availablePeople.length === 0 && (
-                    <div className="text-center py-4 mt-4">
-                      <UserPlusIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-500">
-                        No other people in this family tree yet.
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Create a new person or add more family members first.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Relationship details for linking existing person */}
-                  <div className="border-t pt-4 mt-4">
-                    <h4 className="text-sm font-medium text-gray-700 mb-3">Relationship Details</h4>
-                    <RelationshipForm
-                      formData={spouseData}
-                      onChange={updateSpouseData}
-                      disabled={addRelationshipMutation.isPending}
-                    />
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
+            {activeTab === 'spouse' ? (
               <>
                 {/* Toggle between existing and new person */}
                 <div className="flex rounded-lg border border-gray-300 overflow-hidden mb-4">
                   <button
                     onClick={() => setIsCreatingNew(false)}
-                    className={`flex-1 px-3 py-2 text-sm font-medium ${
-                      !isCreatingNew
-                        ? 'bg-gray-100 text-gray-900'
-                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
+                    className={`flex-1 px-3 py-2 text-sm font-medium ${!isCreatingNew
+                      ? 'bg-gray-100 text-gray-900'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
                   >
                     Link Existing Person
                   </button>
                   <button
                     onClick={() => setIsCreatingNew(true)}
-                    className={`flex-1 px-3 py-2 text-sm font-medium ${
-                      isCreatingNew
-                        ? 'bg-gray-100 text-gray-900'
-                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
+                    className={`flex-1 px-3 py-2 text-sm font-medium ${isCreatingNew
+                      ? 'bg-gray-100 text-gray-900'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
+                  >
+                    Create New Person
+                  </button>
+                </div>
+
+                {isCreatingNew ? (
+                  // Form for creating new spouse
+                  <div className="space-y-4">
+                    <PersonForm
+                      formData={newPersonData}
+                      onChange={updatePersonData}
+                      disabled={addRelationshipMutation.isPending}
+                      showNotes={false}
+                    />
+
+                    {/* Relationship details */}
+                    <div className="border-t pt-4 mt-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Relationship Details</h4>
+                      <RelationshipForm
+                        formData={spouseData}
+                        onChange={updateSpouseData}
+                        disabled={addRelationshipMutation.isPending}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  // Dropdown for selecting existing person + relationship details
+                  <div className="space-y-4">
+                    <Select
+                      label="Select Spouse"
+                      name="spouse_id"
+                      value={selectedPersonId}
+                      onChange={(e) => setSelectedPersonId(e.target.value)}
+                      disabled={addRelationshipMutation.isPending}
+                      options={[
+                        { value: '', label: 'Choose a person...' },
+                        ...availablePeople.map((p) => ({
+                          value: p.id,
+                          label: `${p.first_name} ${p.last_name}${p.birth_date ? ` (${new Date(p.birth_date).getFullYear()})` : ''}`
+                        }))
+                      ]}
+                    />
+
+                    {availablePeople.length === 0 && (
+                      <div className="text-center py-4 mt-4">
+                        <UserPlusIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">
+                          No other people in this family tree yet.
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Create a new person or add more family members first.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Relationship details for linking existing person */}
+                    <div className="border-t pt-4 mt-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">Relationship Details</h4>
+                      <RelationshipForm
+                        formData={spouseData}
+                        onChange={updateSpouseData}
+                        disabled={addRelationshipMutation.isPending}
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Toggle between existing and new person */}
+                <div className="flex rounded-lg border border-gray-300 overflow-hidden mb-4">
+                  <button
+                    onClick={() => setIsCreatingNew(false)}
+                    className={`flex-1 px-3 py-2 text-sm font-medium ${!isCreatingNew
+                      ? 'bg-gray-100 text-gray-900'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
+                  >
+                    Link Existing Person
+                  </button>
+                  <button
+                    onClick={() => setIsCreatingNew(true)}
+                    className={`flex-1 px-3 py-2 text-sm font-medium ${isCreatingNew
+                      ? 'bg-gray-100 text-gray-900'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
                   >
                     Create New Person
                   </button>
@@ -441,6 +439,25 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
                         </p>
                       </div>
                     )}
+
+                    {activeTab === 'child' && (
+                      <div className="mt-4">
+                        <Select
+                          label={`Your role as ${newPersonData.first_name || 'the child'}'s parent`}
+                          name="parent_role"
+                          value={parentRole}
+                          onChange={(e) => setParentRole(e.target.value as 'father' | 'mother')}
+                          disabled={addRelationshipMutation.isPending}
+                          options={[
+                            { value: 'father', label: 'Father' },
+                            { value: 'mother', label: 'Mother' }
+                          ]}
+                        />
+                        <p className="mt-1 text-xs text-gray-500 italic">
+                          Specify if you are the father or mother of this child.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -457,13 +474,13 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
                     {person.children && person.children.length > 0 && (
                       <div>Children: {person.children.map(c => `${c.first_name} ${c.last_name}`).join(', ')}</div>
                     )}
-                     {person.spouses && person.spouses.length > 0 && (
-                       <div>
-                         Spouses: {person.spouses.map(s => 
-                           `${s.first_name} ${s.last_name} (${s.relationship?.type || 'spouse'})`
-                         ).join(', ')}
-                       </div>
-                     )}
+                    {person.spouses && person.spouses.length > 0 && (
+                      <div>
+                        Spouses: {person.spouses.map(s =>
+                          `${s.first_name} ${s.last_name} (${s.relationship?.type || 'spouse'})`
+                        ).join(', ')}
+                      </div>
+                    )}
                     {!person.father && !person.mother && (!person.children || person.children.length === 0) && (!person.spouses || person.spouses.length === 0) && (
                       <div className="text-gray-400 italic">No relationships yet</div>
                     )}

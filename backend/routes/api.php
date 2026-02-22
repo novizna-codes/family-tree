@@ -61,7 +61,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Unified relationship management routes
     Route::post('/trees/{familyTree}/people/{person}/relationships', [PersonController::class, 'manageRelationship']);
     Route::post('/trees/{familyTree}/people/{person}/relationships/link', [PersonController::class, 'linkRelationship']);
+    Route::put('/trees/{familyTree}/people/{person}/relationships/{relationship}', [PersonController::class, 'updateRelationship']);
     Route::delete('/trees/{familyTree}/people/{person}/relationships/{relationship}', [PersonController::class, 'removeRelationship']);
+
+    // Copy person route
+    Route::post('/trees/{familyTree}/people/{person}/copy', [PersonController::class, 'copyToTree']);
 
     // Admin routes
     Route::middleware('admin')->prefix('admin')->group(function () {

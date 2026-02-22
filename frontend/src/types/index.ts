@@ -120,12 +120,19 @@ export interface Person {
   children?: Person[];
   spouses?: PersonSpouse[];
   siblings?: Person[];
+  deleted_at?: string | null;
+}
+
+export interface VisualizationPerson extends Omit<Person, 'children' | 'spouses'> {
+  children: VisualizationPerson[];
+  spouses: VisualizationPerson[];
 }
 
 export interface PersonSpouse {
   id: string;
   first_name: string;
   last_name: string;
+  is_deleted?: boolean;
   relationship: {
     id: string;
     type: 'spouse' | 'partner' | 'divorced' | 'separated';

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import type { Person } from '@/types';
+import type { Person, VisualizationPerson } from '@/types';
 
-interface TreeNode extends d3.HierarchyNode<any> {
+interface TreeNode extends d3.HierarchyPointNode<VisualizationPerson> {
   x: number;
   y: number;
 }
 
-interface Relationship {
+interface LocalRelationship {
   id: string;
   person1_id: string;
   person2_id: string;
@@ -17,16 +17,16 @@ interface Relationship {
 
 interface TreeVisualizationProps {
   people: Person[];
-  relationships?: Relationship[];
-  onPersonClick?: (person: Person, event?: any) => void;
+  relationships?: LocalRelationship[];
+  onPersonClick?: (person: VisualizationPerson | Person, event?: MouseEvent) => void;
   onFamilySwitch?: (personId: string) => void;
   className?: string;
 }
 
 interface FamilyContext {
-  currentPerson: Person | null;
+  currentPerson: VisualizationPerson | null;
   availableFamilies: Array<{
-    person: Person;
+    person: VisualizationPerson;
     relation: 'spouse' | 'self';
     familySize: number;
   }>;
@@ -36,9 +36,9 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
   const svgRef = useRef<SVGSVGElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [rootTreesCount, setRootTreesCount] = useState(1);
-  const [familyContext, setFamilyContext] = useState<FamilyContext>({ 
-    currentPerson: null, 
-    availableFamilies: [] 
+  const [familyContext, setFamilyContext] = useState<FamilyContext>({
+    currentPerson: null,
+    availableFamilies: []
   });
   const [showFamilySelector, setShowFamilySelector] = useState(false);
 
@@ -95,7 +95,7 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
         className="border border-gray-200 rounded-lg bg-white"
       >
       </svg>
-      
+
       {/* Controls */}
       <div className="absolute top-4 right-4 flex gap-2">
         {familyContext.availableFamilies.length > 1 && (
@@ -110,8 +110,8 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
           onClick={() => {
             const svg = d3.select(svgRef.current);
             svg.transition().duration(300).call(
-              d3.zoom<SVGSVGElement, unknown>().transform as any,
-              d3.zoomIdentity.scale(1)
+              // Use a wrapper to handle the transition type compatibility
+              (transition: any) => d3.zoom<SVGSVGElement, unknown>().transform(transition, d3.zoomIdentity.scale(1))
             );
           }}
           className="px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
@@ -119,7 +119,7 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
           Reset View
         </button>
       </div>
-      
+
       {/* Family Selector Modal */}
       {showFamilySelector && (
         <div className="absolute top-16 right-4 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-10 min-w-64">
@@ -155,7 +155,7 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
           </div>
         </div>
       )}
-      
+
       {/* Legend */}
       <div className="absolute bottom-4 left-4 bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
         <div className="text-sm font-medium text-gray-900 mb-2">Legend</div>
@@ -173,7 +173,7 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
             <span>Other</span>
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <div className="w-4 h-1 bg-pink-600" style={{borderTop: '2px dashed #e11d48'}}></div>
+            <div className="w-4 h-1 bg-pink-600" style={{ borderTop: '2px dashed #e11d48' }}></div>
             <span>Spouse</span>
           </div>
           {rootTreesCount > 1 && (
@@ -190,27 +190,26 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
 }
 
 // Helper function to calculate family context for navigation
-function calculateFamilyContext(_people: Person[], _relationships: Relationship[], rootTrees: any[]): FamilyContext {
+function calculateFamilyContext(_people: Person[], _relationships: LocalRelationship[], rootTrees: VisualizationPerson[]): FamilyContext {
   const availableFamilies: FamilyContext['availableFamilies'] = [];
-  
+
   // For each root tree, find the main person and their spouses
   rootTrees.forEach(tree => {
-    // Add the tree's root person
     const familySize = countFamilyMembers(tree);
     availableFamilies.push({
       person: tree,
       relation: 'self',
       familySize
     });
-    
+
     // Add spouse families if they exist in other trees
     if (tree.spouses && tree.spouses.length > 0) {
-      tree.spouses.forEach((spouse: any) => {
+      tree.spouses.forEach((spouse: VisualizationPerson) => {
         // Check if spouse has their own family tree
-        const spouseFamilyTree = rootTrees.find(otherTree => 
+        const spouseFamilyTree = rootTrees.find(otherTree =>
           otherTree.id !== tree.id && hasPersonInTree(otherTree, spouse.id)
         );
-        
+
         if (spouseFamilyTree) {
           const spouseFamilySize = countFamilyMembers(spouseFamilyTree);
           availableFamilies.push({
@@ -223,36 +222,36 @@ function calculateFamilyContext(_people: Person[], _relationships: Relationship[
     }
   });
 
-  function countFamilyMembers(tree: any): number {
+  function countFamilyMembers(tree: VisualizationPerson): number {
     let count = 1; // Count the root
     count += tree.spouses ? tree.spouses.length : 0; // Count spouses
-    
+
     // Recursively count children
-    function countChildren(person: any): number {
+    function countChildren(person: VisualizationPerson): number {
       if (!person.children || person.children.length === 0) return 0;
       let childCount = person.children.length;
-      person.children.forEach((child: any) => {
+      person.children.forEach((child: VisualizationPerson) => {
         childCount += countChildren(child);
         childCount += child.spouses ? child.spouses.length : 0;
       });
       return childCount;
     }
-    
+
     count += countChildren(tree);
     return count;
   }
-  
-  function hasPersonInTree(tree: any, personId: string): boolean {
+
+  function hasPersonInTree(tree: VisualizationPerson, personId: string): boolean {
     if (tree.id === personId) return true;
-    if (tree.spouses && tree.spouses.some((spouse: any) => spouse.id === personId)) return true;
+    if (tree.spouses && tree.spouses.some((spouse: VisualizationPerson) => spouse.id === personId)) return true;
     if (tree.children) {
-      return tree.children.some((child: any) => hasPersonInTree(child, personId));
+      return tree.children.some((child: VisualizationPerson) => hasPersonInTree(child, personId));
     }
     return false;
   }
 
   // Remove duplicates based on person ID
-  const uniqueFamilies = availableFamilies.filter((family, index, arr) => 
+  const uniqueFamilies = availableFamilies.filter((family, index, arr) =>
     arr.findIndex(f => f.person.id === family.person.id) === index
   );
 
@@ -264,12 +263,12 @@ function calculateFamilyContext(_people: Person[], _relationships: Relationship[
 
 
 // Helper function to create multiple hierarchies for forest layout
-function createMultipleHierarchies(people: Person[], relationships: Relationship[] = []): any[] {
+function createMultipleHierarchies(people: Person[], relationships: LocalRelationship[] = []): VisualizationPerson[] {
   if (people.length === 0) return [];
 
   // Create a map for quick lookup
-  const personMap = new Map<string, any>();
-  
+  const personMap = new Map<string, VisualizationPerson>();
+
   // Initialize all people in the map with children and spouses arrays
   people.forEach(person => {
     personMap.set(person.id, { ...person, children: [], spouses: [] });
@@ -280,7 +279,7 @@ function createMultipleHierarchies(people: Person[], relationships: Relationship
     if (relationship.relationship_type === 'spouse') {
       const person1 = personMap.get(relationship.person1_id);
       const person2 = personMap.get(relationship.person2_id);
-      
+
       if (person1 && person2) {
         // Add each as spouse of the other
         person1.spouses.push(person2);
@@ -292,10 +291,10 @@ function createMultipleHierarchies(people: Person[], relationships: Relationship
   // Build parent-child relationships first
   people.forEach(person => {
     // Find children for this person
-    const children = people.filter(p => 
+    const children = people.filter(p =>
       p.father_id === person.id || p.mother_id === person.id
     );
-    
+
     const personWithChildren = personMap.get(person.id)!;
     personWithChildren.children = children.map(child => personMap.get(child.id)!);
   });
@@ -303,105 +302,85 @@ function createMultipleHierarchies(people: Person[], relationships: Relationship
   // Find connected components (groups of people connected by any relationships)
   const connectedComponents = findConnectedComponents(people, relationships);
 
-  // For each connected component, create a unified tree structure
-  const roots: any[] = connectedComponents.map(component => {
-    return createUnifiedTreeStructure(component, personMap, relationships);
+  // For each connected component, find a set of roots that cover everyone
+  const allRoots: VisualizationPerson[] = [];
+  const coveredInHierarchy = new Set<string>();
+
+  connectedComponents.forEach(component => {
+    const componentIds = new Set(component.map(p => p.id));
+
+    // Sort component people to have a stable starting point 
+    // Heuristics: 
+    // 1. People with children first (ancestors)
+    // 2. Males first (traditional structure preference)
+    // 3. Alphabetical / ID (stability)
+    const sortedComponent = [...component].sort((a, b) => {
+      const aHasChildren = people.some(p => p.father_id === a.id || p.mother_id === a.id);
+      const bHasChildren = people.some(p => p.father_id === b.id || p.mother_id === b.id);
+
+      if (aHasChildren && !bHasChildren) return -1;
+      if (!aHasChildren && bHasChildren) return 1;
+
+      if (a.gender === 'M' && b.gender !== 'M') return -1;
+      if (a.gender !== 'M' && b.gender === 'M') return 1;
+
+      return a.id.localeCompare(b.id);
+    });
+
+    // Find all people with no parents in this component
+    const potentialRoots = sortedComponent.filter(person => {
+      const hasParentsInComponent = (person.father_id && componentIds.has(person.father_id)) ||
+        (person.mother_id && componentIds.has(person.mother_id));
+      return !hasParentsInComponent;
+    });
+
+    // If no roots (cycle), use the first person in the sorted component
+    const rootsToProcess = potentialRoots.length > 0 ? potentialRoots : [sortedComponent[0]];
+
+    rootsToProcess.forEach(root => {
+      if (coveredInHierarchy.has(root.id)) return;
+
+      // This is a new independent lineage root
+      const rootNode = personMap.get(root.id)!;
+      allRoots.push(rootNode);
+
+      // Mark everyone reachable from this root as covered
+      markReachableAsCovered(rootNode, coveredInHierarchy);
+    });
   });
 
-  return roots.length > 0 ? roots : [personMap.get(people[0].id) || { ...people[0], children: [], spouses: [] }];
+  return allRoots.length > 0 ? allRoots : [personMap.get(people[0].id) || { ...people[0], children: [], spouses: [] }];
 }
 
-// Helper function to create a unified tree structure for cross-lineage connections
-function createUnifiedTreeStructure(component: Person[], personMap: Map<string, any>, relationships: Relationship[]): any {
-  const componentIds = new Set(component.map(p => p.id));
-  
-  // Find all potential roots (people with no parents in the component)
-  const potentialRoots = component.filter(person => {
-    const hasParentsInComponent = componentIds.has(person.father_id || '') || 
-                                 componentIds.has(person.mother_id || '');
-    return !hasParentsInComponent;
-  });
+/**
+ * Recursively marks a person, their spouses, and all their descendants as covered.
+ * This ensures we don't pick a spouse or a child as a redundant root.
+ */
+function markReachableAsCovered(person: VisualizationPerson, covered: Set<string>) {
+  if (!person || covered.has(person.id)) return;
+  covered.add(person.id);
 
-  // If only one potential root, use it
-  if (potentialRoots.length === 1) {
-    return personMap.get(potentialRoots[0].id)!;
-  }
-
-  // If multiple roots, first check if any of them are connected via descendants/spouses
-  // This handles the case where a parent is added to a spouse and should be part of existing tree
-  if (potentialRoots.length > 1) {
-    // Find the root that has the most connected descendants
-    let bestRoot = potentialRoots[0];
-    let maxConnections = 0;
-    
-    potentialRoots.forEach(root => {
-      // Count how many people in the component are descendants of this root
-      const descendants = findAllDescendants(personMap.get(root.id)!, componentIds);
-      // Count spouse connections from this lineage
-      const spouseConnections = countSpouseConnections(root, relationships, componentIds);
-      const totalConnections = descendants.size + spouseConnections;
-      
-      if (totalConnections > maxConnections) {
-        maxConnections = totalConnections;
-        bestRoot = root;
+  // Mark spouses (they are rendered next to this person)
+  if (person.spouses) {
+    person.spouses.forEach((spouse: VisualizationPerson) => {
+      if (!covered.has(spouse.id)) {
+        covered.add(spouse.id);
+        // Spouses' descendants are usually the same, but let's be thorough
+        if (spouse.children) {
+          spouse.children.forEach((child: VisualizationPerson) => markReachableAsCovered(child, covered));
+        }
       }
     });
-    
-    return personMap.get(bestRoot.id)!;
   }
-  
-  // Fallback: first person from component
-  return personMap.get(component[0].id)!;
-}
 
-// Helper function to find all descendants of a person within a component
-function findAllDescendants(person: any, componentIds: Set<string>, visited = new Set<string>()): Set<string> {
-  const descendants = new Set<string>();
-  
-  if (visited.has(person.id)) return descendants;
-  visited.add(person.id);
-  
+  // Mark children
   if (person.children) {
-    person.children.forEach((child: any) => {
-      if (componentIds.has(child.id)) {
-        descendants.add(child.id);
-        const childDescendants = findAllDescendants(child, componentIds, visited);
-        childDescendants.forEach(id => descendants.add(id));
-      }
-    });
+    person.children.forEach((child: VisualizationPerson) => markReachableAsCovered(child, covered));
   }
-  
-  return descendants;
 }
-
-// Helper function to count spouse connections from a lineage
-function countSpouseConnections(_root: Person, relationships: Relationship[], componentIds: Set<string>): number {
-  let count = 0;
-  
-  relationships.forEach(rel => {
-    if (rel.relationship_type === 'spouse') {
-      const hasPersonInComponent = componentIds.has(rel.person1_id) && componentIds.has(rel.person2_id);
-      if (hasPersonInComponent) {
-        count++;
-      }
-    }
-  });
-  
-  return count;
-}
-
-
-
-
-
-
-
-
-
-
 
 // Helper function to find connected components in the family graph
-function findConnectedComponents(people: Person[], relationships: Relationship[]): Person[][] {
+function findConnectedComponents(people: Person[], relationships: LocalRelationship[]): Person[][] {
   const visited = new Set<string>();
   const components: Person[][] = [];
 
@@ -409,16 +388,16 @@ function findConnectedComponents(people: Person[], relationships: Relationship[]
     if (!visited.has(person.id)) {
       const component: Person[] = [];
       const queue = [person.id];
-      
+
       while (queue.length > 0) {
         const currentId = queue.shift()!;
         if (visited.has(currentId)) continue;
-        
+
         visited.add(currentId);
         const currentPerson = people.find(p => p.id === currentId);
         if (currentPerson) {
           component.push(currentPerson);
-          
+
           // Add connected people to queue
           // 1. Parents (traverse upward)
           if (currentPerson.father_id) {
@@ -433,14 +412,14 @@ function findConnectedComponents(people: Person[], relationships: Relationship[]
               queue.push(mother.id);
             }
           }
-          
+
           // 2. Children (traverse downward)
           people.forEach(p => {
             if ((p.father_id === currentId || p.mother_id === currentId) && !visited.has(p.id)) {
               queue.push(p.id);
             }
           });
-          
+
           // 3. Spouses
           relationships.forEach(rel => {
             if (rel.relationship_type === 'spouse') {
@@ -454,7 +433,7 @@ function findConnectedComponents(people: Person[], relationships: Relationship[]
           });
         }
       }
-      
+
       if (component.length > 0) {
         components.push(component);
       }
@@ -465,9 +444,14 @@ function findConnectedComponents(people: Person[], relationships: Relationship[]
 }
 
 // Render a single tree (existing logic)
-function renderSingleTree(svg: d3.Selection<SVGSVGElement, unknown, null, undefined>, hierarchyData: any, dimensions: { width: number; height: number }, onPersonClick?: (person: Person, event?: any) => void) {
+function renderSingleTree(
+  svg: d3.Selection<SVGSVGElement, unknown, null, undefined>,
+  hierarchyData: VisualizationPerson,
+  dimensions: { width: number; height: number },
+  onPersonClick?: (person: VisualizationPerson | Person, event?: MouseEvent) => void
+) {
   // Create tree layout with more horizontal space for spouses
-  const treeLayout = d3.tree<Person & { spouses?: Person[] }>()
+  const treeLayout = d3.tree<VisualizationPerson>()
     .size([dimensions.width - 100, dimensions.height - 100])
     .separation((a, b) => {
       // Add extra space if either node has spouses
@@ -497,7 +481,12 @@ function renderSingleTree(svg: d3.Selection<SVGSVGElement, unknown, null, undefi
 }
 
 // Render multiple trees side by side (forest layout)
-function renderForestLayout(svg: d3.Selection<SVGSVGElement, unknown, null, undefined>, rootTrees: any[], dimensions: { width: number; height: number }, onPersonClick?: (person: Person, event?: any) => void) {
+function renderForestLayout(
+  svg: d3.Selection<SVGSVGElement, unknown, null, undefined>,
+  rootTrees: VisualizationPerson[],
+  dimensions: { width: number; height: number },
+  onPersonClick?: (person: VisualizationPerson | Person, event?: MouseEvent) => void
+) {
   const treeWidth = Math.max(300, dimensions.width / rootTrees.length - 50);
   const treeHeight = dimensions.height - 100;
 
@@ -518,7 +507,7 @@ function renderForestLayout(svg: d3.Selection<SVGSVGElement, unknown, null, unde
   // Render each tree
   rootTrees.forEach((rootTree, index) => {
     // Create tree layout for this individual tree
-    const treeLayout = d3.tree<Person & { spouses?: Person[] }>()
+    const treeLayout = d3.tree<VisualizationPerson>()
       .size([treeWidth - 50, treeHeight])
       .separation((a, b) => {
         const aHasSpouses = a.data.spouses && a.data.spouses.length > 0;
@@ -551,18 +540,31 @@ function renderForestLayout(svg: d3.Selection<SVGSVGElement, unknown, null, unde
   });
 }
 
+interface SpouseConnection {
+  person: VisualizationPerson;
+  spouse: VisualizationPerson;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
 // Common function to render tree elements (nodes, links, spouses)
-function renderTreeElements(g: d3.Selection<SVGGElement, unknown, null, undefined>, treeData: TreeNode, onPersonClick?: (person: Person, event?: any) => void) {
+function renderTreeElements(
+  g: d3.Selection<SVGGElement, unknown, null, undefined>,
+  treeData: TreeNode,
+  onPersonClick?: (person: VisualizationPerson | Person, event?: MouseEvent) => void
+) {
   // Draw spouse connections before regular links
-  const spouseConnections: any[] = [];
-  
+  const spouseConnections: SpouseConnection[] = [];
+
   treeData.descendants().forEach((node: TreeNode) => {
     if (node.data.spouses && node.data.spouses.length > 0) {
-      node.data.spouses.forEach((spouse: any, index: number) => {
+      node.data.spouses.forEach((spouse: VisualizationPerson, index: number) => {
         // Position spouses horizontally next to the main person
         const spouseX = node.x + (index + 1) * 120; // 120px spacing between spouses
         const spouseY = node.y;
-        
+
         spouseConnections.push({
           person: node.data,
           spouse,
@@ -597,10 +599,10 @@ function renderTreeElements(g: d3.Selection<SVGGElement, unknown, null, undefine
     .attr('class', 'spouse-node')
     .attr('transform', d => `translate(${d.x2}, ${d.y2})`)
     .style('cursor', 'pointer')
-    .on('click', (event, d) => {
+    .on('click', (event: MouseEvent, d: SpouseConnection) => {
       event.stopPropagation();
       if (onPersonClick) {
-        onPersonClick(d.spouse, event.sourceEvent);
+        onPersonClick(d.spouse, event);
       }
     });
 
@@ -613,10 +615,10 @@ function renderTreeElements(g: d3.Selection<SVGGElement, unknown, null, undefine
     })
     .attr('stroke', '#e11d48')
     .attr('stroke-width', 3)
-    .on('mouseover', function() {
+    .on('mouseover', function () {
       d3.select(this).attr('r', 30);
     })
-    .on('mouseout', function() {
+    .on('mouseout', function () {
       d3.select(this).attr('r', 25);
     });
 
@@ -665,10 +667,10 @@ function renderTreeElements(g: d3.Selection<SVGGElement, unknown, null, undefine
     .attr('class', 'node')
     .attr('transform', (d: TreeNode) => `translate(${d.x}, ${d.y})`)
     .style('cursor', 'pointer')
-    .on('click', (event, d) => {
+    .on('click', (event: MouseEvent, d: TreeNode) => {
       event.stopPropagation();
       if (onPersonClick) {
-        onPersonClick(d.data, event.sourceEvent);
+        onPersonClick(d.data, event);
       }
     });
 
@@ -681,10 +683,10 @@ function renderTreeElements(g: d3.Selection<SVGGElement, unknown, null, undefine
     })
     .attr('stroke', '#fff')
     .attr('stroke-width', 3)
-    .on('mouseover', function() {
+    .on('mouseover', function () {
       d3.select(this).attr('r', 30);
     })
-    .on('mouseout', function() {
+    .on('mouseout', function () {
       d3.select(this).attr('r', 25);
     });
 

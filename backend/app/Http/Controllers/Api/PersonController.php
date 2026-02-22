@@ -116,11 +116,16 @@ class PersonController extends Controller
             abort(404);
         }
 
-        $person->delete();
-
-        return response()->json([
-            'message' => 'Person deleted successfully',
-        ]);
+        try {
+            $person->delete();
+            return response()->json([
+                'message' => 'Person deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 
     /**
@@ -136,13 +141,13 @@ class PersonController extends Controller
         ]);
 
         $relationshipType = $request->relationship_type;
-        $relationshipRole = $request->relationship_role ?? null;
+        $relationshipRole = $request->relationship_role ?? $request->parent_role ?? null;
 
         switch ($relationshipType) {
             case 'parent':
                 return $this->handleParentRelationship($request, $familyTree, $person, $relationshipRole);
             case 'child':
-                return $this->handleChildRelationship($request, $familyTree, $person);
+                return $this->handleChildRelationship($request, $familyTree, $person, $relationshipRole);
             case 'spouse':
                 return $this->handleSpouseRelationship($request, $familyTree, $person, $relationshipRole);
             default:
@@ -164,14 +169,14 @@ class PersonController extends Controller
         ]);
 
         $relationshipType = $validated['relationship_type'];
-        $relationshipRole = $validated['relationship_role'] ?? null;
+        $relationshipRole = $validated['relationship_role'] ?? $request->parent_role ?? null;
         $relatedPersonId = $validated['related_person_id'];
 
         switch ($relationshipType) {
             case 'parent':
                 return $this->handleParentLink($request, $familyTree, $person, $relatedPersonId, $relationshipRole);
             case 'child':
-                return $this->handleChildLink($request, $familyTree, $person, $relatedPersonId);
+                return $this->handleChildLink($request, $familyTree, $person, $relatedPersonId, $relationshipRole);
             case 'spouse':
                 return $this->handleSpouseLink($request, $familyTree, $person, $relatedPersonId, $relationshipRole);
             default:
@@ -185,6 +190,14 @@ class PersonController extends Controller
     public function removeRelationship(Request $request, FamilyTree $familyTree, Person $person, $relationshipId)
     {
         $this->authorize('update', $familyTree);
+
+        // Check if relationshipId is a parent type (father/mother)
+        if (in_array($relationshipId, ['father', 'mother'])) {
+            $person->update([$relationshipId . '_id' => null]);
+            return response()->json([
+                'message' => ucfirst($relationshipId) . ' unlinked successfully',
+            ]);
+        }
 
         // Find relationship where this person is involved
         $relationship = $familyTree->relationships()
@@ -206,6 +219,79 @@ class PersonController extends Controller
         return response()->json([
             'message' => 'Relationship removed successfully',
         ]);
+    }
+
+    /**
+     * Update metadata for a relationship
+     */
+    public function updateRelationship(Request $request, FamilyTree $familyTree, Person $person, Relationship $relationship)
+    {
+        $this->authorize('update', $familyTree);
+
+        if ($relationship->family_tree_id !== $familyTree->id) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'relationship_type' => 'required|in:spouse,partner,divorced,separated',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'marriage_place' => 'nullable|string|max:255',
+            'notes' => 'nullable|string',
+        ]);
+
+        $relationship->update($validated);
+
+        return response()->json([
+            'data' => $relationship->load(['person1', 'person2']),
+            'message' => 'Relationship updated successfully',
+        ]);
+    }
+
+    /**
+     * Copy a person's information to another family tree
+     */
+    public function copyToTree(Request $request, FamilyTree $familyTree, Person $person)
+    {
+        $this->authorize('view', $familyTree);
+
+        $validated = $request->validate([
+            'target_tree_id' => 'required|uuid|exists:family_trees,id',
+        ]);
+
+        $targetTree = FamilyTree::findOrFail($validated['target_tree_id']);
+        $this->authorize('update', $targetTree);
+
+        // Check if person already exists in the target tree (optional simple check)
+        $exists = Person::where('family_tree_id', $targetTree->id)
+            ->where('first_name', $person->first_name)
+            ->where('last_name', $person->last_name)
+            ->where('birth_date', $person->birth_date)
+            ->exists();
+
+        if ($exists) {
+            return response()->json([
+                'message' => 'A person with this name and birth date already exists in the target tree',
+            ], 422);
+        }
+
+        // Duplicate the person
+        $newPerson = $person->replicate([
+            'father_id',
+            'mother_id',
+            'family_tree_id',
+            'created_at',
+            'updated_at',
+            'deleted_at'
+        ]);
+        
+        $newPerson->family_tree_id = $targetTree->id;
+        $newPerson->save();
+
+        return response()->json([
+            'data' => $newPerson,
+            'message' => 'Person copied successfully to ' . $targetTree->name,
+        ], 201);
     }
 
     /**
@@ -267,7 +353,7 @@ class PersonController extends Controller
     /**
      * Handle creating a new child and establishing relationship
      */
-    private function handleChildRelationship(Request $request, FamilyTree $familyTree, Person $person)
+    private function handleChildRelationship(Request $request, FamilyTree $familyTree, Person $person, ?string $relationshipRole)
     {
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
@@ -286,11 +372,24 @@ class PersonController extends Controller
         $childData = $this->processPersonData($validated);
         $childData['family_tree_id'] = $familyTree->id;
 
-        if ($person->gender === 'M') {
-            $childData['father_id'] = $person->id;
-        } elseif ($person->gender === 'F') {
-            $childData['mother_id'] = $person->id;
+        // Determine the role of the current person ($person) as a parent of the new child
+        $parentRole = $relationshipRole ?: $request->parent_role;
+        
+        if (!$parentRole) {
+            if ($person->gender === 'M') {
+                $parentRole = 'father';
+            } elseif ($person->gender === 'F') {
+                $parentRole = 'mother';
+            } else {
+                return response()->json(['message' => 'Please specify if the current person is the father or mother'], 422);
+            }
         }
+
+        if (!in_array($parentRole, ['father', 'mother'])) {
+            return response()->json(['message' => 'parent_role must be either "father" or "mother"'], 422);
+        }
+
+        $childData[$parentRole . '_id'] = $person->id;
 
         $child = Person::create($childData);
 
@@ -378,6 +477,13 @@ class PersonController extends Controller
             return response()->json(['message' => 'relationship_role must be either "father" or "mother" for parent relationships'], 422);
         }
 
+        // Check for circular relationship
+        if ($parent->isDescendantOf($person->id)) {
+            return response()->json([
+                'message' => 'Cannot link this person as parent: it would create a circular relationship (this person is already an ancestor of the potential parent).',
+            ], 422);
+        }
+
         // Update person with new parent
         $person->update([
             $parentType . '_id' => $parent->id
@@ -392,7 +498,7 @@ class PersonController extends Controller
     /**
      * Handle linking existing person as child
      */
-    private function handleChildLink(Request $request, FamilyTree $familyTree, Person $person, string $childId)
+    private function handleChildLink(Request $request, FamilyTree $familyTree, Person $person, string $childId, ?string $relationshipRole)
     {
         $child = Person::findOrFail($childId);
 
@@ -403,16 +509,33 @@ class PersonController extends Controller
             ], 422);
         }
 
-        // Update child with this person as parent based on gender
-        if ($person->gender === 'M') {
-            $child->update(['father_id' => $person->id]);
-        } elseif ($person->gender === 'F') {
-            $child->update(['mother_id' => $person->id]);
-        } else {
-            return response()->json([
-                'message' => 'Person must have gender specified to be linked as parent',
+        // Determine the role of the current person ($person) as a parent of the child
+        $role = $relationshipRole ?: $request->parent_role;
+        
+        if (!$role) {
+            if ($person->gender === 'M') {
+                $role = 'father';
+            } elseif ($person->gender === 'F') {
+                $role = 'mother';
+            } else {
+                return response()->json([
+                    'message' => 'Please specify if the current person is the father or mother',
+                ], 422);
+            }
+        }
+
+        if (!in_array($role, ['father', 'mother'])) {
+            return response()->json(['message' => 'role must be either "father" or "mother"'], 422);
+        }
+
+        // Check for circular relationship
+        if ($person->isDescendantOf($child->id) || $child->id === $person->id) {
+             return response()->json([
+                'message' => 'Cannot link this person as child: it would create a circular relationship.',
             ], 422);
         }
+
+        $child->update([$role . '_id' => $person->id]);
 
         return response()->json([
             'data' => $child->load(['father', 'mother']),
