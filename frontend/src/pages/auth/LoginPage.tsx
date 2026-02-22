@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-hot-toast';
 import { useAuthStore } from '@/store/authStore';
+import { useRegistrationStatus } from '@/hooks/useRegistrationStatus';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { LoginCredentials } from '@/types';
@@ -11,6 +12,7 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
+  const { data: registrationStatus } = useRegistrationStatus();
   
   const {
     register,
@@ -87,17 +89,19 @@ export const LoginPage: React.FC = () => {
             </Button>
           </div>
 
-          <div className="text-center">
-            <span className="text-sm text-gray-600">
-              Don't have an account?{' '}
-              <Link
-                to="/register"
-                className="font-medium text-primary-600 hover:text-primary-500"
-              >
-                Sign up
-              </Link>
-            </span>
-          </div>
+          {registrationStatus?.enabled && (
+            <div className="text-center">
+              <span className="text-sm text-gray-600">
+                Don't have an account?{' '}
+                <Link
+                  to="/register"
+                  className="font-medium text-primary-600 hover:text-primary-500"
+                >
+                  Sign up
+                </Link>
+              </span>
+            </div>
+          )}
         </form>
       </div>
     </div>

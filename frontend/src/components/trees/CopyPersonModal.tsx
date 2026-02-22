@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { XMarkIcon, ClipboardIcon } from '@heroicons/react/24/outline';
 import { Button } from '@/components/ui/Button';

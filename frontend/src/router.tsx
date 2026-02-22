@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { GuestGuard } from '@/components/auth/GuestGuard';
 import { SetupGuard } from '@/components/auth/SetupGuard';
+import { RegistrationGuard } from '@/components/auth/RegistrationGuard';
 import { AdminGuard } from '@/components/admin/AdminGuard';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 
@@ -45,9 +46,11 @@ export const router = createBrowserRouter([
     path: '/register',
     element: (
       <SetupGuard>
-        <GuestGuard>
-          <RegisterPage />
-        </GuestGuard>
+        <RegistrationGuard>
+          <GuestGuard>
+            <RegisterPage />
+          </GuestGuard>
+        </RegistrationGuard>
       </SetupGuard>
     ),
   },

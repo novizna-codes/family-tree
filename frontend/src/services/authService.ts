@@ -30,4 +30,9 @@ export const authService = {
   refreshToken: async (): Promise<{ token: string }> => {
     return apiService.post<{ token: string }>('/auth/refresh');
   },
+
+  getRegistrationStatus: async (): Promise<{ enabled: boolean }> => {
+    const response = await apiService.get<{ enabled: boolean }>('/auth/registration-status');
+    return response;
+  },
 };
