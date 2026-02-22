@@ -65,7 +65,7 @@ export function RelationshipEditModal({ isOpen, onClose, relationship, personId,
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-medium text-gray-900 flex items-center">
                             <HeartIcon className="h-5 w-5 mr-2 text-pink-600" />
-                            Edit Relationship with {partner?.first_name}
+                            Edit Relationship with {partner?.full_name}
                         </h3>
                         <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
                             <XMarkIcon className="h-6 w-6" />

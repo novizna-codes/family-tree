@@ -132,6 +132,7 @@ export interface PersonSpouse {
   id: string;
   first_name: string;
   last_name: string;
+  full_name: string;
   is_deleted?: boolean;
   relationship: {
     id: string;

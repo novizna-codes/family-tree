@@ -145,7 +145,7 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
                 className="w-full text-left p-2 rounded-md hover:bg-gray-50 border border-gray-200"
               >
                 <div className="font-medium text-sm">
-                  {family.person.first_name} {family.person.last_name}'s Family
+                  {family.person.full_name}'s Family
                 </div>
                 <div className="text-xs text-gray-500">
                   {family.relation === 'spouse' ? 'Spouse\'s Family' : 'Current Family'} • {family.familySize} members
@@ -626,7 +626,7 @@ function renderTreeElements(
   spouseNodes.append('text')
     .attr('dy', 45)
     .attr('text-anchor', 'middle')
-    .text(d => `${d.spouse.first_name} ${d.spouse.last_name}`)
+    .text(d => `${d.spouse.full_name}`)
     .attr('fill', '#374151')
     .attr('font-size', '12px')
     .attr('font-weight', '500');
@@ -694,7 +694,7 @@ function renderTreeElements(
   nodes.append('text')
     .attr('dy', 45)
     .attr('text-anchor', 'middle')
-    .text((d: TreeNode) => `${d.data.first_name} ${d.data.last_name}`)
+    .text((d: TreeNode) => `${d.data.full_name}`)
     .attr('fill', '#374151')
     .attr('font-size', '12px')
     .attr('font-weight', '500');

@@ -346,7 +346,7 @@ export const TreeViewPage: React.FC = () => {
                           onClick={(e) => handlePersonClick(person, e)}
                         >
                           <h4 className="text-sm font-medium text-gray-900">
-                            {person.first_name} {person.last_name}
+                            {person.full_name}
                           </h4>
                           <div className="mt-1 text-sm text-gray-600">
                             {person.birth_date && (
@@ -411,7 +411,7 @@ export const TreeViewPage: React.FC = () => {
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-semibold text-gray-900">
-                  {selectedPerson.first_name} {selectedPerson.last_name}
+                  {selectedPerson.full_name}
                 </h3>
                 <button
                   onClick={handleClosePersonDetails}
@@ -428,7 +428,7 @@ export const TreeViewPage: React.FC = () => {
                 <div>
                   <span className="font-medium text-gray-700">Full Name:</span>
                   <span className="ml-2 text-gray-900">
-                    {selectedPerson.first_name} {selectedPerson.last_name}
+                    {selectedPerson.full_name}
                   </span>
                 </div>
 
@@ -493,7 +493,7 @@ export const TreeViewPage: React.FC = () => {
                         <span className="text-[10px] font-bold uppercase text-gray-400 w-16 tracking-wider">Father</span>
                         {selectedPerson.father ? (
                           <span className="text-sm font-medium text-blue-600 cursor-pointer hover:underline" onClick={() => setSelectedPerson(selectedPerson.father!)}>
-                            {selectedPerson.father.first_name} {selectedPerson.father.last_name}
+                            {selectedPerson.father.full_name}
                           </span>
                         ) : (
                           <span className="text-sm text-gray-400 italic">Not set</span>
@@ -515,7 +515,7 @@ export const TreeViewPage: React.FC = () => {
                         <span className="text-[10px] font-bold uppercase text-gray-400 w-16 tracking-wider">Mother</span>
                         {selectedPerson.mother ? (
                           <span className="text-sm font-medium text-pink-600 cursor-pointer hover:underline" onClick={() => setSelectedPerson(selectedPerson.mother!)}>
-                            {selectedPerson.mother.first_name} {selectedPerson.mother.last_name}
+                            {selectedPerson.mother.full_name}
                           </span>
                         ) : (
                           <span className="text-sm text-gray-400 italic">Not set</span>
@@ -540,7 +540,7 @@ export const TreeViewPage: React.FC = () => {
                             {spouse.relationship?.type || 'Spouse'}
                           </span>
                           <span className="text-sm font-medium text-gray-900">
-                            {spouse.first_name} {spouse.last_name}
+                            {spouse.full_name}
                           </span>
                         </div>
                         <div className="flex items-center space-x-1">
@@ -576,12 +576,12 @@ export const TreeViewPage: React.FC = () => {
                         <div className="flex items-center space-x-3">
                           <span className="text-[10px] font-bold uppercase text-gray-400 w-16 tracking-wider">Child</span>
                           <span className="text-sm font-medium text-gray-900 cursor-pointer hover:underline hover:text-blue-600" onClick={() => setSelectedPerson(child)}>
-                            {child.first_name} {child.last_name}
+                            {child.full_name}
                           </span>
                         </div>
                         <button
                           onClick={() => {
-                            if (window.confirm(`Unlink ${child.first_name} as a child?`)) {
+                            if (window.confirm(`Unlink ${child.full_name} as a child?`)) {
                               // For children, we need to know if the current person is father or mother
                               const parentRole = selectedPerson.gender === 'F' ? 'mother' : 'father';
                               treeService.removeRelationship(id!, child.id, parentRole)

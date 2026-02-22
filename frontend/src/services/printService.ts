@@ -206,7 +206,7 @@ export class PrintService {
       // Person name
       pdf.setFontSize(12);
       pdf.setFont('helvetica', 'bold');
-      const fullName = `${person.first_name} ${person.last_name || ''}`.trim();
+      const fullName = `${person.full_name}`.trim();
       pdf.text(`${index + 1}. ${fullName}`, 20, yPosition);
       yPosition += 8;
       

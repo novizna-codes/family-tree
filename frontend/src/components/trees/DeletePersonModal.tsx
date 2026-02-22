@@ -55,7 +55,7 @@ export function DeletePersonModal({ isOpen, onClose, person, treeId }: DeletePer
           {/* Content */}
           <div className="mb-6">
             <p className="text-sm text-gray-700">
-              Are you sure you want to delete <strong>{person.first_name} {person.last_name}</strong>? 
+              Are you sure you want to delete <strong>{person.full_name}</strong>?
               This will remove them from the family tree and cannot be undone.
             </p>
             

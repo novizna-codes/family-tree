@@ -301,7 +301,7 @@ export const AddPersonPage: React.FC = () => {
                         .filter(person => person.gender === 'M' || !person.gender)
                         .map(person => (
                           <option key={person.id} value={person.id}>
-                            {person.first_name} {person.last_name}
+                            {person.full_name}
                           </option>
                         ))}
                     </select>
@@ -323,7 +323,7 @@ export const AddPersonPage: React.FC = () => {
                         .filter(person => person.gender === 'F' || !person.gender)
                         .map(person => (
                           <option key={person.id} value={person.id}>
-                            {person.first_name} {person.last_name}
+                            {person.full_name}
                           </option>
                         ))}
                     </select>

@@ -103,7 +103,7 @@ export function PersonEditModal({ isOpen, onClose, person, treeId }: PersonEditM
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-medium text-gray-900">
-              Edit {person.first_name} {person.last_name}
+              Edit {person.full_name}
             </h3>
             <button
               onClick={onClose}

@@ -246,7 +246,7 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
         <div className="flex-shrink-0 p-6 border-b border-gray-200">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium text-gray-900">
-              Manage Relationships for {person.first_name} {person.last_name}
+              Manage Relationships for {person.full_name}
             </h3>
             <button
               onClick={onClose}
@@ -349,7 +349,7 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
                         { value: '', label: 'Choose a person...' },
                         ...availablePeople.map((p) => ({
                           value: p.id,
-                          label: `${p.first_name} ${p.last_name}${p.birth_date ? ` (${new Date(p.birth_date).getFullYear()})` : ''}`
+                          label: `${p.full_name}${p.birth_date ? ` (${new Date(p.birth_date).getFullYear()})` : ''}`
                         }))
                       ]}
                     />
@@ -423,7 +423,7 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
                         { value: '', label: 'Choose a person...' },
                         ...availablePeople.map((p) => ({
                           value: p.id,
-                          label: `${p.first_name} ${p.last_name}${p.birth_date ? ` (${new Date(p.birth_date).getFullYear()})` : ''}`
+                          label: `${p.full_name}${p.birth_date ? ` (${new Date(p.birth_date).getFullYear()})` : ''}`
                         }))
                       ]}
                     />
@@ -466,18 +466,18 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
                   <h4 className="text-sm font-medium text-gray-700 mb-2">Current Relationships:</h4>
                   <div className="text-xs text-gray-600 space-y-1">
                     {person.father && (
-                      <div>Father: {person.father.first_name} {person.father.last_name}</div>
+                      <div>Father: {person.father.full_name}</div>
                     )}
                     {person.mother && (
-                      <div>Mother: {person.mother.first_name} {person.mother.last_name}</div>
+                      <div>Mother: {person.mother.full_name}</div>
                     )}
                     {person.children && person.children.length > 0 && (
-                      <div>Children: {person.children.map(c => `${c.first_name} ${c.last_name}`).join(', ')}</div>
+                      <div>Children: {person.children.map(c => `${c.full_name}`).join(', ')}</div>
                     )}
                     {person.spouses && person.spouses.length > 0 && (
                       <div>
                         Spouses: {person.spouses.map(s =>
-                          `${s.first_name} ${s.last_name} (${s.relationship?.type || 'spouse'})`
+                          `${s.full_name} (${s.relationship?.type || 'spouse'})`
                         ).join(', ')}
                       </div>
                     )}

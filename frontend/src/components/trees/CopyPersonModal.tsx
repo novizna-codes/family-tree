@@ -62,7 +62,7 @@ export function CopyPersonModal({ isOpen, onClose, person, currentTreeId }: Copy
                     </div>
 
                     <p className="text-sm text-gray-600 mb-6">
-                        Copy <strong>{person.first_name} {person.last_name}</strong> to another family tree.
+                        Copy <strong>{person.full_name}</strong> to another family tree.
                         Only basic information (name, dates, places, notes) will be copied.
                         Relationships and photos will not be preserved.
                     </p>
