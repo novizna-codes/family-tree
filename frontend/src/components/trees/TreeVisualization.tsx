@@ -653,7 +653,7 @@ function renderSVGLegend(g: d3.Selection<SVGGElement, unknown, null, undefined>,
 
   const items = [
     { label: 'Male', color: '#3B82F6', type: 'circle' },
-    { label: 'Female', color: '#EC4899', type: 'circle' },
+    { label: 'Female', color: '#3CB030FF', type: 'circle' },
     { label: 'Other', color: '#6B7280', type: 'circle' },
     { label: 'Spouse', color: '#e11d48', type: 'line' }
   ];
@@ -757,7 +757,7 @@ function renderTreeElements(
     .attr('r', 25)
     .attr('fill', (d) => {
       const gender = d.spouse.gender;
-      return gender === 'M' ? '#3B82F6' : gender === 'F' ? '#EC4899' : '#6B7280';
+      return gender === 'M' ? '#3B82F6' : gender === 'F' ? '#3CB030FF' : '#6B7280';
     })
     .attr('stroke', '#e11d48')
     .attr('stroke-width', 3)
@@ -826,7 +826,7 @@ function renderTreeElements(
     .attr('r', 25)
     .attr('fill', (d: TreeNode) => {
       const gender = d.data.gender;
-      return gender === 'M' ? '#3B82F6' : gender === 'F' ? '#EC4899' : '#6B7280';
+      return gender === 'M' ? '#3B82F6' : gender === 'F' ? '#3CB030FF' : '#6B7280';
     })
     .attr('stroke', '#fff')
     .attr('stroke-width', 3)
