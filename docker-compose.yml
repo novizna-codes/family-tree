@@ -11,8 +11,6 @@ services:
       MYSQL_DATABASE: family_tree
       MYSQL_USER: family_tree_user
       MYSQL_PASSWORD: family_tree_password
-    ports:
-      - "3309:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro

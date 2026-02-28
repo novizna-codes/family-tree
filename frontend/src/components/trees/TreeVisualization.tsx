@@ -20,6 +20,8 @@ interface TreeVisualizationProps {
   relationships?: LocalRelationship[];
   onPersonClick?: (person: VisualizationPerson | Person, event?: MouseEvent) => void;
   onFamilySwitch?: (personId: string) => void;
+  showLegend?: boolean;
+  showControls?: boolean;
   className?: string;
 }
 
@@ -32,9 +34,23 @@ interface FamilyContext {
   }>;
 }
 
-export function TreeVisualization({ people, relationships = [], onPersonClick, onFamilySwitch, className = '' }: TreeVisualizationProps) {
+// Spacing Constants
+const NODE_RADIUS = 25;
+const SPOUSE_SPACING = 80; // Reduced from 120
+const HORIZONTAL_SPACING = 150; // Reduced from 180
+const VERTICAL_SPACING = 150; // Reduced from 150
+
+export function TreeVisualization({ 
+  people, 
+  relationships = [], 
+  onPersonClick, 
+  onFamilySwitch, 
+  showLegend = true,
+  showControls = true,
+  className = '' 
+}: TreeVisualizationProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [dimensions, setDimensions] = useState({ width: 1920, height: 1500 });
   const [rootTreesCount, setRootTreesCount] = useState(1);
   const [familyContext, setFamilyContext] = useState<FamilyContext>({
     currentPerson: null,
@@ -58,13 +74,13 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
 
     // If single tree, use existing logic
     if (rootTrees.length === 1) {
-      renderSingleTree(svg, rootTrees[0], dimensions, onPersonClick);
+      renderSingleTree(svg, rootTrees[0], showLegend, onPersonClick);
     } else {
       // Render multiple trees side by side (forest layout)
-      renderForestLayout(svg, rootTrees, dimensions, onPersonClick);
+      renderForestLayout(svg, rootTrees, showLegend, onPersonClick);
     }
 
-  }, [people, relationships, dimensions, onPersonClick]);
+  }, [people, relationships, dimensions, onPersonClick, showLegend]);
 
   // Handle window resize
   useEffect(() => {
@@ -90,35 +106,35 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
     <div className={`w-full h-full overflow-hidden ${className}`}>
       <svg
         ref={svgRef}
-        width={dimensions.width}
-        height={dimensions.height}
-        className="border border-gray-200 rounded-lg bg-white"
+        className="w-full h-full border border-gray-200 rounded-lg bg-white block"
       >
       </svg>
 
       {/* Controls */}
-      <div className="absolute top-4 right-4 flex gap-2">
-        {familyContext.availableFamilies.length > 1 && (
+      {showControls && (
+        <div className="absolute top-4 right-4 flex gap-2" data-html2canvas-ignore="true">
+          {familyContext.availableFamilies.length > 1 && (
+            <button
+              onClick={() => setShowFamilySelector(!showFamilySelector)}
+              className="px-3 py-2 bg-blue-600 text-white border border-blue-700 rounded-md text-sm font-medium hover:bg-blue-700 shadow-sm"
+            >
+              Switch Family ({familyContext.availableFamilies.length})
+            </button>
+          )}
           <button
-            onClick={() => setShowFamilySelector(!showFamilySelector)}
-            className="px-3 py-2 bg-blue-600 text-white border border-blue-700 rounded-md text-sm font-medium hover:bg-blue-700 shadow-sm"
+            onClick={() => {
+              const svg = d3.select(svgRef.current);
+              svg.transition().duration(300).call(
+                // Use a wrapper to handle the transition type compatibility
+                (transition: any) => d3.zoom<SVGSVGElement, unknown>().transform(transition, d3.zoomIdentity.scale(1))
+              );
+            }}
+            className="px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
           >
-            Switch Family ({familyContext.availableFamilies.length})
+            Reset View
           </button>
-        )}
-        <button
-          onClick={() => {
-            const svg = d3.select(svgRef.current);
-            svg.transition().duration(300).call(
-              // Use a wrapper to handle the transition type compatibility
-              (transition: any) => d3.zoom<SVGSVGElement, unknown>().transform(transition, d3.zoomIdentity.scale(1))
-            );
-          }}
-          className="px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
-        >
-          Reset View
-        </button>
-      </div>
+        </div>
+      )}
 
       {/* Family Selector Modal */}
       {showFamilySelector && (
@@ -156,35 +172,37 @@ export function TreeVisualization({ people, relationships = [], onPersonClick, o
         </div>
       )}
 
-      {/* Legend */}
-      <div className="absolute bottom-4 left-4 bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
-        <div className="text-sm font-medium text-gray-900 mb-2">Legend</div>
-        <div className="flex flex-col gap-1 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-            <span>Male</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-pink-500"></div>
-            <span>Female</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-gray-500"></div>
-            <span>Other</span>
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <div className="w-4 h-1 bg-pink-600" style={{ borderTop: '2px dashed #e11d48' }}></div>
-            <span>Spouse</span>
-          </div>
-          {rootTreesCount > 1 && (
-            <div className="mt-2 pt-2 border-t border-gray-200">
-              <div className="text-xs text-gray-600">
-                {rootTreesCount} independent families
-              </div>
+      {/* Legend - Hidden by default in normal view if requested, and always ignored by html2canvas */}
+      {showLegend && showControls && (
+        <div className="absolute bottom-4 left-4 bg-white border border-gray-200 rounded-lg p-3 shadow-sm" data-html2canvas-ignore="true">
+          <div className="text-sm font-medium text-gray-900 mb-2">Legend</div>
+          <div className="flex flex-col gap-1 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+              <span>Male</span>
             </div>
-          )}
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-pink-500"></div>
+              <span>Female</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-gray-500"></div>
+              <span>Other</span>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-4 h-1 bg-pink-600" style={{ borderTop: '2px dashed #e11d48' }}></div>
+              <span>Spouse</span>
+            </div>
+            {rootTreesCount > 1 && (
+              <div className="mt-2 pt-2 border-t border-gray-200">
+                <div className="text-xs text-gray-600">
+                  {rootTreesCount} independent families
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -447,30 +465,68 @@ function findConnectedComponents(people: Person[], relationships: LocalRelations
 function renderSingleTree(
   svg: d3.Selection<SVGSVGElement, unknown, null, undefined>,
   hierarchyData: VisualizationPerson,
-  dimensions: { width: number; height: number },
+  showLegend: boolean,
   onPersonClick?: (person: VisualizationPerson | Person, event?: MouseEvent) => void
 ) {
-  // Create tree layout with more horizontal space for spouses
+  // Create tree layout with dynamic spacing
   const treeLayout = d3.tree<VisualizationPerson>()
-    .size([dimensions.width - 100, dimensions.height - 100])
+    .nodeSize([HORIZONTAL_SPACING, VERTICAL_SPACING])
     .separation((a, b) => {
-      // Add extra space if either node has spouses
-      const aHasSpouses = a.data.spouses && a.data.spouses.length > 0;
-      const bHasSpouses = b.data.spouses && b.data.spouses.length > 0;
-      return (aHasSpouses || bHasSpouses) ? 2 : 1;
+      // Calculate how many spouses are between these two nodes
+      const aSpouses = a.data.spouses ? a.data.spouses.length : 0;
+      
+      // Base separation is 1.0 (one HORIZONTAL_SPACING)
+      // We add extra space based on the number of spouses the left node has
+      const baseSep = a.parent === b.parent ? 1.0 : 1.25;
+      const extraSep = (aSpouses * SPOUSE_SPACING) / HORIZONTAL_SPACING;
+      
+      return baseSep + extraSep;
     });
 
   const root = d3.hierarchy(hierarchyData);
   const treeData = treeLayout(root) as TreeNode;
 
+  // Calculate bounding box to set viewBox
+  const nodes = treeData.descendants();
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+  nodes.forEach(node => {
+    // Current node boundaries
+    minX = Math.min(minX, node.x - NODE_RADIUS - 20);
+    maxX = Math.max(maxX, node.x + NODE_RADIUS + 20);
+    minY = Math.min(minY, node.y - NODE_RADIUS - 20);
+    maxY = Math.max(maxY, node.y + NODE_RADIUS + 70); // Extra for name
+
+    // Spouse boundaries
+    if (node.data.spouses) {
+      node.data.spouses.forEach((_, i) => {
+        const spouseX = node.x + (i + 1) * SPOUSE_SPACING;
+        minX = Math.min(minX, spouseX - NODE_RADIUS - 20);
+        maxX = Math.max(maxX, spouseX + NODE_RADIUS + 20);
+      });
+    }
+  });
+
+  if (showLegend) {
+    maxY += 100; // Extra space for integrated legend at the bottom
+  }
+
+  const width = maxX - minX;
+  const height = maxY - minY;
+
+  // Set viewBox for the SVG to encompass the entire tree
+  svg.attr('viewBox', `${minX} ${minY} ${width} ${height}`);
+  svg.attr('width', '100%');
+  svg.attr('height', '100%');
+  svg.style('max-width', '100%');
+  svg.style('height', 'auto');
+
   // Create group for the tree
-  const g = svg
-    .append('g')
-    .attr('transform', 'translate(50, 50)');
+  const g = svg.append('g');
 
   // Add zoom and pan functionality
   const zoom = d3.zoom<SVGSVGElement, unknown>()
-    .scaleExtent([0.5, 2])
+    .scaleExtent([0.1, 4])
     .on('zoom', (event) => {
       g.attr('transform', event.transform);
     });
@@ -478,65 +534,155 @@ function renderSingleTree(
   svg.call(zoom);
 
   renderTreeElements(g, treeData, onPersonClick);
+
+  if (showLegend) {
+    renderSVGLegend(g, minX, maxY - 80);
+  }
 }
 
 // Render multiple trees side by side (forest layout)
 function renderForestLayout(
   svg: d3.Selection<SVGSVGElement, unknown, null, undefined>,
   rootTrees: VisualizationPerson[],
-  dimensions: { width: number; height: number },
+  showLegend: boolean,
   onPersonClick?: (person: VisualizationPerson | Person, event?: MouseEvent) => void
 ) {
-  const treeWidth = Math.max(300, dimensions.width / rootTrees.length - 50);
-  const treeHeight = dimensions.height - 100;
-
   // Create main group for forest
-  const forestGroup = svg
-    .append('g')
-    .attr('transform', 'translate(25, 50)');
+  const forestGroup = svg.append('g');
 
   // Add zoom and pan functionality for entire forest
   const zoom = d3.zoom<SVGSVGElement, unknown>()
-    .scaleExtent([0.3, 2])
+    .scaleExtent([0.1, 4])
     .on('zoom', (event) => {
       forestGroup.attr('transform', event.transform);
     });
 
   svg.call(zoom);
 
+  let currentOffsetX = 0;
+  let overallMaxX = 0, overallMinY = Infinity, overallMaxY = -Infinity;
+
   // Render each tree
   rootTrees.forEach((rootTree, index) => {
-    // Create tree layout for this individual tree
     const treeLayout = d3.tree<VisualizationPerson>()
-      .size([treeWidth - 50, treeHeight])
+      .nodeSize([HORIZONTAL_SPACING, VERTICAL_SPACING])
       .separation((a, b) => {
-        const aHasSpouses = a.data.spouses && a.data.spouses.length > 0;
-        const bHasSpouses = b.data.spouses && b.data.spouses.length > 0;
-        return (aHasSpouses || bHasSpouses) ? 1.5 : 1;
+        const aSpouses = a.data.spouses ? a.data.spouses.length : 0;
+        const extraSep = (aSpouses * SPOUSE_SPACING) / HORIZONTAL_SPACING;
+        return (a.parent === b.parent ? 1.0 : 1.25) + extraSep;
       });
 
     const root = d3.hierarchy(rootTree);
     const treeData = treeLayout(root) as TreeNode;
 
+    // Calculate bounding box for this tree
+    const nodes = treeData.descendants();
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+    nodes.forEach(node => {
+      minX = Math.min(minX, node.x - NODE_RADIUS - 20);
+      maxX = Math.max(maxX, node.x + NODE_RADIUS + 20);
+      minY = Math.min(minY, node.y - NODE_RADIUS - 20);
+      maxY = Math.max(maxY, node.y + NODE_RADIUS + 70);
+
+      if (node.data.spouses) {
+        node.data.spouses.forEach((_, i) => {
+          const spouseX = node.x + (i + 1) * SPOUSE_SPACING;
+          maxX = Math.max(maxX, spouseX + NODE_RADIUS + 20);
+        });
+      }
+    });
+
+    const treeWidth = maxX - minX;
+
     // Create group for this tree positioned horizontally
     const treeGroup = forestGroup
       .append('g')
       .attr('class', `tree-${index}`)
-      .attr('transform', `translate(${index * treeWidth}, 0)`);
+      .attr('transform', `translate(${currentOffsetX - minX}, 0)`);
 
-    // Add subtle background for each tree
+    // Add background for each tree
     treeGroup
       .append('rect')
-      .attr('x', -25)
-      .attr('y', -25)
-      .attr('width', treeWidth - 25)
-      .attr('height', treeHeight + 50)
+      .attr('x', minX - 10)
+      .attr('y', minY - 10)
+      .attr('width', treeWidth + 20)
+      .attr('height', (maxY - minY) + 20)
       .attr('fill', '#f8fafc')
       .attr('stroke', '#e2e8f0')
       .attr('stroke-width', 1)
       .attr('rx', 8);
 
     renderTreeElements(treeGroup, treeData, onPersonClick);
+
+    // Update overall bounding box
+    overallMaxX = Math.max(overallMaxX, currentOffsetX + treeWidth);
+    overallMinY = Math.min(overallMinY, minY);
+    overallMaxY = Math.max(overallMaxY, maxY);
+
+    // Increment offset for next tree with some gap
+    currentOffsetX += treeWidth + 100;
+  });
+
+  if (showLegend) {
+    overallMaxY += 100;
+  }
+
+  // Set viewBox for the entire forest
+  svg.attr('viewBox', `0 ${overallMinY - 50} ${overallMaxX + 100} ${overallMaxY - overallMinY + 100}`);
+  
+  if (showLegend) {
+    renderSVGLegend(forestGroup, 0, overallMaxY - 80);
+  }
+  svg.attr('width', '100%');
+  svg.attr('height', '100%');
+  svg.style('max-width', '100%');
+  svg.style('height', 'auto');
+}
+
+function renderSVGLegend(g: d3.Selection<SVGGElement, unknown, null, undefined>, x: number, y: number) {
+  const legend = g.append('g')
+    .attr('class', 'svg-legend')
+    .attr('transform', `translate(${x + 20}, ${y})`);
+
+  legend.append('text')
+    .attr('font-size', '14px')
+    .attr('font-weight', 'bold')
+    .attr('fill', '#111827')
+    .text('Legend');
+
+  const items = [
+    { label: 'Male', color: '#3B82F6', type: 'circle' },
+    { label: 'Female', color: '#EC4899', type: 'circle' },
+    { label: 'Other', color: '#6B7280', type: 'circle' },
+    { label: 'Spouse', color: '#e11d48', type: 'line' }
+  ];
+
+  items.forEach((item, i) => {
+    const itemG = legend.append('g')
+      .attr('transform', `translate(${i * 100}, 25)`);
+
+    if (item.type === 'circle') {
+      itemG.append('circle')
+        .attr('r', 6)
+        .attr('fill', item.color);
+    } else {
+      itemG.append('line')
+        .attr('x1', -8)
+        .attr('y1', 0)
+        .attr('x2', 8)
+        .attr('y2', 0)
+        .attr('stroke', item.color)
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '3,2');
+    }
+
+    itemG.append('text')
+      .attr('x', 15)
+      .attr('y', 4)
+      .attr('font-size', '12px')
+      .attr('fill', '#374151')
+      .text(item.label);
   });
 }
 
@@ -562,7 +708,7 @@ function renderTreeElements(
     if (node.data.spouses && node.data.spouses.length > 0) {
       node.data.spouses.forEach((spouse: VisualizationPerson, index: number) => {
         // Position spouses horizontally next to the main person
-        const spouseX = node.x + (index + 1) * 120; // 120px spacing between spouses
+        const spouseX = node.x + (index + 1) * SPOUSE_SPACING;
         const spouseY = node.y;
 
         spouseConnections.push({
@@ -659,6 +805,7 @@ function renderTreeElements(
     .attr('stroke', '#ccc')
     .attr('stroke-width', 2);
 
+  console.log(treeData)
   // Draw person nodes
   const nodes = g.selectAll('.node')
     .data(treeData.descendants())

@@ -36,6 +36,7 @@ export const TreeViewPage: React.FC = () => {
   const [relationshipToEdit, setRelationshipToEdit] = useState<(Relationship & { personId?: string }) | null>(null);
   const [copyModalOpen, setCopyModalOpen] = useState(false);
   const [relEditModalOpen, setRelEditModalOpen] = useState(false);
+  const [showOverlays, setShowOverlays] = useState(true);
   const treeElementRef = useRef<HTMLDivElement>(null);
 
   const { data: tree, isLoading: treeLoading, error: treeError } = useQuery({
@@ -246,13 +247,24 @@ export const TreeViewPage: React.FC = () => {
 
               {/* Print Button */}
               {people.length > 0 && (
-                <Button
-                  variant="outline"
-                  onClick={handleOpenPrintModal}
-                >
-                  <PrinterIcon className="h-4 w-4 mr-2" />
-                  Print / Export
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <label className="flex items-center cursor-pointer mr-2">
+                    <input
+                      type="checkbox"
+                      checked={showOverlays}
+                      onChange={(e) => setShowOverlays(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <span className="ml-2 text-sm text-gray-700 font-medium">Show Help & Legend</span>
+                  </label>
+                  <Button
+                    variant="outline"
+                    onClick={handleOpenPrintModal}
+                  >
+                    <PrinterIcon className="h-4 w-4 mr-2" />
+                    Print / Export
+                  </Button>
+                </div>
               )}
 
               <Link to={`/trees/${id}/people/add`}>
@@ -294,27 +306,31 @@ export const TreeViewPage: React.FC = () => {
             {viewMode === 'tree' ? (
               <div className="h-[calc(100vh-200px)] relative">
                 {/* Instruction tooltip */}
-                <div className="absolute top-4 right-4 z-10 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4 text-sm shadow-lg max-w-64">
-                  <div className="flex items-center mb-2">
-                    <span className="text-xl mr-2">💡</span>
-                    <span className="font-semibold text-blue-900">Tree Navigation</span>
-                  </div>
-                  <div className="space-y-1 text-blue-800">
-                    <div className="flex items-center">
-                      <span className="w-4 h-4 bg-blue-200 rounded-full mr-2"></span>
-                      <span>Click → View details</span>
+                {showOverlays && (
+                  <div className="absolute top-4 right-4 z-10 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4 text-sm shadow-lg max-w-64" data-html2canvas-ignore="true">
+                    <div className="flex items-center mb-2">
+                      <span className="text-xl mr-2">💡</span>
+                      <span className="font-semibold text-blue-900">Tree Navigation</span>
                     </div>
-                    <div className="flex items-center">
-                      <span className="w-4 h-4 bg-green-200 rounded-full mr-2"></span>
-                      <span><kbd className="px-2 py-1 bg-white rounded text-xs border">Ctrl</kbd> + Click → Add relationships</span>
+                    <div className="space-y-1 text-blue-800">
+                      <div className="flex items-center">
+                        <span className="w-4 h-4 bg-blue-200 rounded-full mr-2"></span>
+                        <span>Click → View details</span>
+                      </div>
+                      <div className="flex items-center">
+                        <span className="w-4 h-4 bg-green-200 rounded-full mr-2"></span>
+                        <span><kbd className="px-2 py-1 bg-white rounded text-xs border">Ctrl</kbd> + Click → Add relationships</span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
                 <TreeVisualization
                   people={people}
                   relationships={visualization?.relationships}
                   onPersonClick={handlePersonClick}
-                  className="w-full h-full"
+                  showLegend={false} // Integrated SVG legend is handled inside PrintModal or explicitly
+                  showControls={showOverlays}
+                  // className="w-full h-full"
                 />
               </div>
             ) : (

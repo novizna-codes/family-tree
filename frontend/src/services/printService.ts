@@ -3,8 +3,6 @@ import jsPDF from 'jspdf';
 import type { Person, FamilyTree } from '@/types';
 
 export interface PrintOptions {
-  format: 'A4' | 'A3' | 'Letter';
-  orientation: 'portrait' | 'landscape';
   includeDetails: boolean;
   includePhotos: boolean;
   includeNotes: boolean;
@@ -12,82 +10,55 @@ export interface PrintOptions {
 }
 
 export class PrintService {
-  private static defaultOptions: PrintOptions = {
-    format: 'A4',
-    orientation: 'landscape',
-    includeDetails: true,
-    includePhotos: false,
-    includeNotes: false,
-    fontSize: 'medium',
-  };
+  // The defaultOptions property was removed as it was not being used in the current implementation.
+  // The handlePrintOptionsChange function was also removed as it's typically used in UI components for state management,
+  // not directly within a static service class like this, and was not called anywhere.
 
   static async generatePDF(
     tree: FamilyTree,
-    people: Person[],
-    element: HTMLElement,
-    options: Partial<PrintOptions> = {}
+    _people: Person[],
+    element: HTMLElement
   ): Promise<void> {
-    const finalOptions = { ...this.defaultOptions, ...options };
-    
     try {
       // Show loading indicator
       const loadingDiv = this.createLoadingIndicator();
       document.body.appendChild(loadingDiv);
 
-      // Get dimensions based on format
-      const dimensions = this.getDimensions(finalOptions.format, finalOptions.orientation);
-      
       // Capture the tree visualization
+      // We use a high scale for quality, but the PDF internal dimensions will be 1:1 with pixels (initially)
       const canvas = await html2canvas(element, {
         width: element.scrollWidth,
         height: element.scrollHeight,
-        scale: 2, // High resolution
+        scale: 2, // High resolution for quality
         useCORS: true,
         backgroundColor: '#ffffff',
       });
 
-      // Create PDF
+      // Convert pixels to mm (approx 0.264583 mm per pixel at 96 DPI)
+      // However, jsPDF can take pixels directly if we specify 'pt' or just use the pixel values as mm for simplicity
+      // and let the user scale it during print if needed. 
+      // A better approach is to keep the aspect ratio and use a reasonable base width.
+      
+      const pxToMm = 0.264583;
+      const pdfWidth = canvas.width * pxToMm / 2; // adjust for scale 2
+      const pdfHeight = canvas.height * pxToMm / 2;
+
+      // Create PDF with dynamic size
       const pdf = new jsPDF({
-        orientation: finalOptions.orientation,
+        orientation: pdfWidth > pdfHeight ? 'landscape' : 'portrait',
         unit: 'mm',
-        format: finalOptions.format.toLowerCase() as any,
+        format: [pdfWidth, pdfHeight],
       });
 
-      // Calculate scaling to fit page
-      const imgWidth = dimensions.width;
-      const imgHeight = dimensions.height;
-      const canvasAspectRatio = canvas.width / canvas.height;
-      const pageAspectRatio = imgWidth / imgHeight;
-
-      let finalWidth = imgWidth;
-      let finalHeight = imgHeight;
-
-      if (canvasAspectRatio > pageAspectRatio) {
-        // Canvas is wider, scale by width
-        finalHeight = imgWidth / canvasAspectRatio;
-      } else {
-        // Canvas is taller, scale by height
-        finalWidth = imgHeight * canvasAspectRatio;
-      }
-
-      // Add title page
-      this.addTitlePage(pdf, tree, people, finalOptions);
-      
-      // Add tree visualization
-      pdf.addPage();
+      // Add tree visualization as the only page
       pdf.addImage(
         canvas.toDataURL('image/png'),
         'PNG',
-        (imgWidth - finalWidth) / 2,
-        (imgHeight - finalHeight) / 2,
-        finalWidth,
-        finalHeight
+        0,
+        0,
+        pdfWidth,
+        pdfHeight
       );
-
-      // Add details page if requested
-      if (finalOptions.includeDetails) {
-        this.addDetailsPage(pdf, people, finalOptions);
-      }
 
       // Save PDF
       const filename = `${tree.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_family_tree.pdf`;
@@ -114,132 +85,6 @@ export class PrintService {
     return div;
   }
 
-  private static getDimensions(format: string, orientation: string) {
-    const dimensions: Record<string, { width: number; height: number }> = {
-      A4: { width: 210, height: 297 },
-      A3: { width: 297, height: 420 },
-      Letter: { width: 216, height: 279 },
-    };
-
-    const base = dimensions[format] || dimensions.A4;
-    
-    if (orientation === 'landscape') {
-      return { width: base.height, height: base.width };
-    }
-    
-    return base;
-  }
-
-  private static addTitlePage(
-    pdf: jsPDF,
-    tree: FamilyTree,
-    people: Person[],
-    _options: PrintOptions
-  ): void {
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    
-    // Title
-    pdf.setFontSize(24);
-    pdf.setFont('helvetica', 'bold');
-    const title = tree.name || 'Family Tree';
-    const titleWidth = pdf.getTextWidth(title);
-    pdf.text(title, (pageWidth - titleWidth) / 2, 40);
-
-    // Description
-    if (tree.description) {
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'normal');
-      const lines = pdf.splitTextToSize(tree.description, pageWidth - 40);
-      pdf.text(lines, 20, 60);
-    }
-
-    // Statistics
-    pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Family Tree Statistics', 20, 100);
-    
-    pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'normal');
-    
-    const stats = [
-      `Total Family Members: ${people.length}`,
-      `Living Members: ${people.filter(p => p.is_living).length}`,
-      `Deceased Members: ${people.filter(p => !p.is_living).length}`,
-      `Male Members: ${people.filter(p => p.gender === 'M').length}`,
-      `Female Members: ${people.filter(p => p.gender === 'F').length}`,
-    ];
-    
-    stats.forEach((stat, index) => {
-      pdf.text(stat, 25, 115 + (index * 8));
-    });
-
-    // Generation info
-    pdf.text('Generated on: ' + new Date().toLocaleDateString(), 20, pageHeight - 30);
-    pdf.text('Family Tree Builder Application', 20, pageHeight - 20);
-  }
-
-  private static addDetailsPage(
-    pdf: jsPDF,
-    people: Person[],
-    options: PrintOptions
-  ): void {
-    pdf.addPage();
-    
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    let yPosition = 20;
-    
-    // Title
-    pdf.setFontSize(16);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Family Members Details', 20, yPosition);
-    yPosition += 15;
-    
-    // People list
-    people.forEach((person, index) => {
-      // Check if we need a new page
-      if (yPosition > 250) {
-        pdf.addPage();
-        yPosition = 20;
-      }
-      
-      // Person name
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      const fullName = `${person.full_name}`.trim();
-      pdf.text(`${index + 1}. ${fullName}`, 20, yPosition);
-      yPosition += 8;
-      
-      // Person details
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      
-      const details = [];
-      if (person.gender) details.push(`Gender: ${person.gender}`);
-      if (person.birth_date) details.push(`Born: ${new Date(person.birth_date).toLocaleDateString()}`);
-      if (person.birth_place) details.push(`Birth Place: ${person.birth_place}`);
-      if (person.death_date) details.push(`Died: ${new Date(person.death_date).toLocaleDateString()}`);
-      details.push(`Status: ${person.is_living ? 'Living' : 'Deceased'}`);
-      
-      details.forEach(detail => {
-        pdf.text(`   ${detail}`, 25, yPosition);
-        yPosition += 5;
-      });
-      
-      // Notes if requested
-      if (options.includeNotes && person.notes) {
-        pdf.text('   Notes:', 25, yPosition);
-        yPosition += 5;
-        const noteLines = pdf.splitTextToSize(person.notes, pageWidth - 60);
-        noteLines.forEach((line: string) => {
-          pdf.text(`     ${line}`, 25, yPosition);
-          yPosition += 5;
-        });
-      }
-      
-      yPosition += 5; // Extra space between people
-    });
-  }
 
   static async printTree(element: HTMLElement): Promise<void> {
     // Create a print-friendly version
@@ -283,7 +128,7 @@ export class PrintService {
         }, 500);
       };
       
-    } catch (error) {
+    } catch {
       printWindow.close();
       throw new Error('Failed to prepare print document.');
     }

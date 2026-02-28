@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { XMarkIcon, PrinterIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 import { Button } from '@/components/ui/Button';
-import { PrintService, type PrintOptions } from '@/services/printService';
+import { PrintService } from '@/services/printService';
 import type { Person, FamilyTree } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -14,19 +14,8 @@ interface PrintModalProps {
 }
 
 export function PrintModal({ isOpen, onClose, tree, people, treeElement }: PrintModalProps) {
-  const [options, setOptions] = useState<PrintOptions>({
-    format: 'A4',
-    orientation: 'landscape',
-    includeDetails: true,
-    includePhotos: false,
-    includeNotes: false,
-    fontSize: 'medium',
-  });
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const handlePrintOptionsChange = (key: keyof PrintOptions, value: any) => {
-    setOptions(prev => ({ ...prev, [key]: value }));
-  };
 
   const handleGeneratePDF = async () => {
     if (!treeElement) {
@@ -36,7 +25,7 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
 
     setIsGenerating(true);
     try {
-      await PrintService.generatePDF(tree, people, treeElement, options);
+      await PrintService.generatePDF(tree, people, treeElement);
       toast.success('PDF generated successfully!');
       onClose();
     } catch (error) {
@@ -81,129 +70,16 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
 
           {/* Print Options */}
           <div className="space-y-6">
-            {/* Paper Format */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Paper Format
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['A4', 'A3', 'Letter'] as const).map((format) => (
-                  <button
-                    key={format}
-                    onClick={() => handlePrintOptionsChange('format', format)}
-                    className={`px-3 py-2 text-sm font-medium rounded-md border ${
-                      options.format === format
-                        ? 'bg-blue-50 border-blue-200 text-blue-700'
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {format}
-                  </button>
-                ))}
-              </div>
-            </div>
 
-            {/* Orientation */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Orientation
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {(['portrait', 'landscape'] as const).map((orientation) => (
-                  <button
-                    key={orientation}
-                    onClick={() => handlePrintOptionsChange('orientation', orientation)}
-                    className={`px-3 py-2 text-sm font-medium rounded-md border capitalize ${
-                      options.orientation === orientation
-                        ? 'bg-blue-50 border-blue-200 text-blue-700'
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {orientation}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Font Size */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Font Size
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['small', 'medium', 'large'] as const).map((size) => (
-                  <button
-                    key={size}
-                    onClick={() => handlePrintOptionsChange('fontSize', size)}
-                    className={`px-3 py-2 text-sm font-medium rounded-md border capitalize ${
-                      options.fontSize === size
-                        ? 'bg-blue-50 border-blue-200 text-blue-700'
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Include Options */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Include in Export
-              </label>
-              <div className="space-y-3">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={options.includeDetails}
-                    onChange={(e) => handlePrintOptionsChange('includeDetails', e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">
-                    Detailed person information
-                  </span>
-                </label>
-                
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={options.includePhotos}
-                    onChange={(e) => handlePrintOptionsChange('includePhotos', e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">
-                    Photos (when available)
-                  </span>
-                </label>
-                
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={options.includeNotes}
-                    onChange={(e) => handlePrintOptionsChange('includeNotes', e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">
-                    Personal notes
-                  </span>
-                </label>
-              </div>
-            </div>
 
             {/* Preview Info */}
             <div className="bg-gray-50 rounded-lg p-4">
               <h4 className="text-sm font-medium text-gray-900 mb-2">Export Preview</h4>
               <div className="text-xs text-gray-600 space-y-1">
-                <div>Format: {options.format} {options.orientation}</div>
+                <div>Dimensions: Dynamic (adapts to tree size)</div>
                 <div>Family Members: {people.length}</div>
-                <div>Font Size: {options.fontSize}</div>
                 <div>
-                  Includes: {[
-                    options.includeDetails && 'Details',
-                    options.includePhotos && 'Photos',
-                    options.includeNotes && 'Notes'
-                  ].filter(Boolean).join(', ') || 'Tree visualization only'}
+                  Includes: Tree visualization & legend (bottom)
                 </div>
               </div>
             </div>
