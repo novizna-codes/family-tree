@@ -37,6 +37,7 @@ export const TreeViewPage: React.FC = () => {
   const [copyModalOpen, setCopyModalOpen] = useState(false);
   const [relEditModalOpen, setRelEditModalOpen] = useState(false);
   const [showOverlays, setShowOverlays] = useState(true);
+  const [showNavigationHelp, setShowNavigationHelp] = useState(true);
   const treeElementRef = useRef<HTMLDivElement>(null);
 
   const { data: tree, isLoading: treeLoading, error: treeError } = useQuery({
@@ -252,7 +253,13 @@ export const TreeViewPage: React.FC = () => {
                     <input
                       type="checkbox"
                       checked={showOverlays}
-                      onChange={(e) => setShowOverlays(e.target.checked)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setShowOverlays(checked);
+                        if (checked) {
+                          setShowNavigationHelp(true);
+                        }
+                      }}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
                     <span className="ml-2 text-sm text-gray-700 font-medium">Show Help & Legend</span>
@@ -286,7 +293,7 @@ export const TreeViewPage: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto p-6">
+      <div className={viewMode === 'tree' ? 'w-full px-4 sm:px-6 py-4' : 'max-w-7xl mx-auto p-6'}>
         {people.length === 0 ? (
           <div className="text-center py-12">
             <PresentationChartLineIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -304,13 +311,23 @@ export const TreeViewPage: React.FC = () => {
         ) : (
           <div className="relative" ref={treeElementRef}>
             {viewMode === 'tree' ? (
-              <div className="h-[calc(100vh-200px)] relative">
+              <div className="h-[calc(100vh-170px)] relative">
                 {/* Instruction tooltip */}
-                {showOverlays && (
-                  <div className="absolute top-4 right-4 z-10 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4 text-sm shadow-lg max-w-64" data-html2canvas-ignore="true">
-                    <div className="flex items-center mb-2">
+                {showOverlays && showNavigationHelp && (
+                  <div className="absolute top-4 left-4 z-10 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4 text-sm shadow-lg max-w-72" data-html2canvas-ignore="true">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
                       <span className="text-xl mr-2">💡</span>
                       <span className="font-semibold text-blue-900">Tree Navigation</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowNavigationHelp(false)}
+                        className="text-blue-700 hover:text-blue-900"
+                        aria-label="Hide navigation help"
+                      >
+                        <XMarkIcon className="h-4 w-4" />
+                      </button>
                     </div>
                     <div className="space-y-1 text-blue-800">
                       <div className="flex items-center">
@@ -320,6 +337,10 @@ export const TreeViewPage: React.FC = () => {
                       <div className="flex items-center">
                         <span className="w-4 h-4 bg-green-200 rounded-full mr-2"></span>
                         <span><kbd className="px-2 py-1 bg-white rounded text-xs border">Ctrl</kbd> + Click → Add relationships</span>
+                      </div>
+                      <div className="flex items-center">
+                        <span className="w-4 h-4 bg-amber-200 rounded-full mr-2"></span>
+                        <span>Drag to move • Use +/- to zoom</span>
                       </div>
                     </div>
                   </div>

@@ -19,44 +19,79 @@ interface TreeVisualizationProps {
   people: Person[];
   relationships?: LocalRelationship[];
   onPersonClick?: (person: VisualizationPerson | Person, event?: MouseEvent) => void;
-  onFamilySwitch?: (personId: string) => void;
   showLegend?: boolean;
   showControls?: boolean;
   className?: string;
 }
 
-interface FamilyContext {
-  currentPerson: VisualizationPerson | null;
-  availableFamilies: Array<{
-    person: VisualizationPerson;
-    relation: 'spouse' | 'self';
-    familySize: number;
-  }>;
-}
-
 // Spacing Constants
-const NODE_RADIUS = 25;
-const SPOUSE_SPACING = 80; // Reduced from 120
+const NODE_RADIUS = 36;
+const SPOUSE_SPACING = 130;
 const HORIZONTAL_SPACING = 150; // Reduced from 180
 const VERTICAL_SPACING = 150; // Reduced from 150
+const WHEEL_ZOOM_SENSITIVITY = 0.0003;
+
+function getNodeLabelLines(fullName?: string): string[] {
+  if (!fullName) return [''];
+
+  const maxCharsPerLine = 12;
+  const maxLines = 2;
+  const words = fullName.trim().split(/\s+/).filter(Boolean);
+
+  if (words.length === 0) return [''];
+
+  const lines: string[] = [];
+  let current = '';
+
+  words.forEach((word) => {
+    const candidate = current ? `${current} ${word}` : word;
+
+    if (candidate.length <= maxCharsPerLine) {
+      current = candidate;
+      return;
+    }
+
+    if (current) {
+      lines.push(current);
+      current = '';
+    }
+
+    if (word.length <= maxCharsPerLine) {
+      current = word;
+    } else {
+      lines.push(`${word.slice(0, maxCharsPerLine - 3)}...`);
+    }
+  });
+
+  if (current) lines.push(current);
+
+  if (lines.length <= maxLines) return lines;
+
+  const trimmed = lines.slice(0, maxLines);
+  const last = trimmed[maxLines - 1];
+  trimmed[maxLines - 1] = last.length > maxCharsPerLine - 3
+    ? `${last.slice(0, maxCharsPerLine - 3)}...`
+    : `${last}...`;
+  return trimmed;
+}
+
+function getWheelZoomDelta(event: WheelEvent): number {
+  const modeFactor = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 120 : 1;
+  return -event.deltaY * modeFactor * WHEEL_ZOOM_SENSITIVITY;
+}
 
 export function TreeVisualization({ 
   people, 
   relationships = [], 
   onPersonClick, 
-  onFamilySwitch, 
   showLegend = true,
   showControls = true,
   className = '' 
 }: TreeVisualizationProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const [dimensions, setDimensions] = useState({ width: 1920, height: 1500 });
   const [rootTreesCount, setRootTreesCount] = useState(1);
-  const [familyContext, setFamilyContext] = useState<FamilyContext>({
-    currentPerson: null,
-    availableFamilies: []
-  });
-  const [showFamilySelector, setShowFamilySelector] = useState(false);
 
   useEffect(() => {
     if (!svgRef.current || people.length === 0) return;
@@ -68,16 +103,12 @@ export function TreeVisualization({
     const rootTrees = createMultipleHierarchies(people, relationships);
     setRootTreesCount(rootTrees.length);
 
-    // Calculate family context for navigation
-    const context = calculateFamilyContext(people, relationships, rootTrees);
-    setFamilyContext(context);
-
     // If single tree, use existing logic
     if (rootTrees.length === 1) {
-      renderSingleTree(svg, rootTrees[0], showLegend, onPersonClick);
+      zoomBehaviorRef.current = renderSingleTree(svg, rootTrees[0], showLegend, onPersonClick);
     } else {
       // Render multiple trees side by side (forest layout)
-      renderForestLayout(svg, rootTrees, showLegend, onPersonClick);
+      zoomBehaviorRef.current = renderForestLayout(svg, rootTrees, showLegend, onPersonClick);
     }
 
   }, [people, relationships, dimensions, onPersonClick, showLegend]);
@@ -102,8 +133,32 @@ export function TreeVisualization({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const handleZoomIn = () => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return;
+    d3.select(svgRef.current)
+      .transition()
+      .duration(220)
+      .call(zoomBehaviorRef.current.scaleBy as any, 1.2);
+  };
+
+  const handleZoomOut = () => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return;
+    d3.select(svgRef.current)
+      .transition()
+      .duration(220)
+      .call(zoomBehaviorRef.current.scaleBy as any, 0.8);
+  };
+
+  const handleResetView = () => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return;
+    d3.select(svgRef.current)
+      .transition()
+      .duration(250)
+      .call(zoomBehaviorRef.current.transform as any, d3.zoomIdentity);
+  };
+
   return (
-    <div className={`w-full h-full overflow-hidden ${className}`}>
+    <div className={`w-full h-full overflow-hidden relative ${className}`}>
       <svg
         ref={svgRef}
         className="w-full h-full border border-gray-200 rounded-lg bg-white block"
@@ -113,62 +168,26 @@ export function TreeVisualization({
       {/* Controls */}
       {showControls && (
         <div className="absolute top-4 right-4 flex gap-2" data-html2canvas-ignore="true">
-          {familyContext.availableFamilies.length > 1 && (
-            <button
-              onClick={() => setShowFamilySelector(!showFamilySelector)}
-              className="px-3 py-2 bg-blue-600 text-white border border-blue-700 rounded-md text-sm font-medium hover:bg-blue-700 shadow-sm"
-            >
-              Switch Family ({familyContext.availableFamilies.length})
-            </button>
-          )}
           <button
-            onClick={() => {
-              const svg = d3.select(svgRef.current);
-              svg.transition().duration(300).call(
-                // Use a wrapper to handle the transition type compatibility
-                (transition: any) => d3.zoom<SVGSVGElement, unknown>().transform(transition, d3.zoomIdentity.scale(1))
-              );
-            }}
+            onClick={handleZoomOut}
+            className="px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
+            title="Zoom out"
+          >
+            -
+          </button>
+          <button
+            onClick={handleZoomIn}
+            className="px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
+            title="Zoom in"
+          >
+            +
+          </button>
+          <button
+            onClick={handleResetView}
             className="px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
           >
             Reset View
           </button>
-        </div>
-      )}
-
-      {/* Family Selector Modal */}
-      {showFamilySelector && (
-        <div className="absolute top-16 right-4 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-10 min-w-64">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-sm font-medium text-gray-900">Available Families</h3>
-            <button
-              onClick={() => setShowFamilySelector(false)}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="space-y-2">
-            {familyContext.availableFamilies.map((family, index) => (
-              <button
-                key={`${family.person.id}-${index}`}
-                onClick={() => {
-                  if (onFamilySwitch) {
-                    onFamilySwitch(family.person.id);
-                  }
-                  setShowFamilySelector(false);
-                }}
-                className="w-full text-left p-2 rounded-md hover:bg-gray-50 border border-gray-200"
-              >
-                <div className="font-medium text-sm">
-                  {family.person.full_name}'s Family
-                </div>
-                <div className="text-xs text-gray-500">
-                  {family.relation === 'spouse' ? 'Spouse\'s Family' : 'Current Family'} • {family.familySize} members
-                </div>
-              </button>
-            ))}
-          </div>
         </div>
       )}
 
@@ -206,79 +225,6 @@ export function TreeVisualization({
     </div>
   );
 }
-
-// Helper function to calculate family context for navigation
-function calculateFamilyContext(_people: Person[], _relationships: LocalRelationship[], rootTrees: VisualizationPerson[]): FamilyContext {
-  const availableFamilies: FamilyContext['availableFamilies'] = [];
-
-  // For each root tree, find the main person and their spouses
-  rootTrees.forEach(tree => {
-    const familySize = countFamilyMembers(tree);
-    availableFamilies.push({
-      person: tree,
-      relation: 'self',
-      familySize
-    });
-
-    // Add spouse families if they exist in other trees
-    if (tree.spouses && tree.spouses.length > 0) {
-      tree.spouses.forEach((spouse: VisualizationPerson) => {
-        // Check if spouse has their own family tree
-        const spouseFamilyTree = rootTrees.find(otherTree =>
-          otherTree.id !== tree.id && hasPersonInTree(otherTree, spouse.id)
-        );
-
-        if (spouseFamilyTree) {
-          const spouseFamilySize = countFamilyMembers(spouseFamilyTree);
-          availableFamilies.push({
-            person: spouse,
-            relation: 'spouse',
-            familySize: spouseFamilySize
-          });
-        }
-      });
-    }
-  });
-
-  function countFamilyMembers(tree: VisualizationPerson): number {
-    let count = 1; // Count the root
-    count += tree.spouses ? tree.spouses.length : 0; // Count spouses
-
-    // Recursively count children
-    function countChildren(person: VisualizationPerson): number {
-      if (!person.children || person.children.length === 0) return 0;
-      let childCount = person.children.length;
-      person.children.forEach((child: VisualizationPerson) => {
-        childCount += countChildren(child);
-        childCount += child.spouses ? child.spouses.length : 0;
-      });
-      return childCount;
-    }
-
-    count += countChildren(tree);
-    return count;
-  }
-
-  function hasPersonInTree(tree: VisualizationPerson, personId: string): boolean {
-    if (tree.id === personId) return true;
-    if (tree.spouses && tree.spouses.some((spouse: VisualizationPerson) => spouse.id === personId)) return true;
-    if (tree.children) {
-      return tree.children.some((child: VisualizationPerson) => hasPersonInTree(child, personId));
-    }
-    return false;
-  }
-
-  // Remove duplicates based on person ID
-  const uniqueFamilies = availableFamilies.filter((family, index, arr) =>
-    arr.findIndex(f => f.person.id === family.person.id) === index
-  );
-
-  return {
-    currentPerson: rootTrees.length > 0 ? rootTrees[0] : null,
-    availableFamilies: uniqueFamilies
-  };
-}
-
 
 // Helper function to create multiple hierarchies for forest layout
 function createMultipleHierarchies(people: Person[], relationships: LocalRelationship[] = []): VisualizationPerson[] {
@@ -467,7 +413,7 @@ function renderSingleTree(
   hierarchyData: VisualizationPerson,
   showLegend: boolean,
   onPersonClick?: (person: VisualizationPerson | Person, event?: MouseEvent) => void
-) {
+): d3.ZoomBehavior<SVGSVGElement, unknown> {
   // Create tree layout with dynamic spacing
   const treeLayout = d3.tree<VisualizationPerson>()
     .nodeSize([HORIZONTAL_SPACING, VERTICAL_SPACING])
@@ -495,7 +441,7 @@ function renderSingleTree(
     minX = Math.min(minX, node.x - NODE_RADIUS - 20);
     maxX = Math.max(maxX, node.x + NODE_RADIUS + 20);
     minY = Math.min(minY, node.y - NODE_RADIUS - 20);
-    maxY = Math.max(maxY, node.y + NODE_RADIUS + 70); // Extra for name
+    maxY = Math.max(maxY, node.y + NODE_RADIUS + 58);
 
     // Spouse boundaries
     if (node.data.spouses) {
@@ -519,25 +465,32 @@ function renderSingleTree(
   svg.attr('width', '100%');
   svg.attr('height', '100%');
   svg.style('max-width', '100%');
-  svg.style('height', 'auto');
+  svg.style('height', '100%');
+  svg.style('cursor', 'grab');
 
   // Create group for the tree
   const g = svg.append('g');
 
   // Add zoom and pan functionality
   const zoom = d3.zoom<SVGSVGElement, unknown>()
-    .scaleExtent([0.1, 4])
+    .scaleExtent([0.35, 16])
+    .wheelDelta(getWheelZoomDelta)
     .on('zoom', (event) => {
       g.attr('transform', event.transform);
     });
 
   svg.call(zoom);
+  svg.on('mousedown', () => svg.style('cursor', 'grabbing'));
+  svg.on('mouseup', () => svg.style('cursor', 'grab'));
+  svg.on('mouseleave', () => svg.style('cursor', 'grab'));
 
   renderTreeElements(g, treeData, onPersonClick);
 
   if (showLegend) {
     renderSVGLegend(g, minX, maxY - 80);
   }
+
+  return zoom;
 }
 
 // Render multiple trees side by side (forest layout)
@@ -546,18 +499,23 @@ function renderForestLayout(
   rootTrees: VisualizationPerson[],
   showLegend: boolean,
   onPersonClick?: (person: VisualizationPerson | Person, event?: MouseEvent) => void
-) {
+): d3.ZoomBehavior<SVGSVGElement, unknown> {
   // Create main group for forest
   const forestGroup = svg.append('g');
 
   // Add zoom and pan functionality for entire forest
   const zoom = d3.zoom<SVGSVGElement, unknown>()
-    .scaleExtent([0.1, 4])
+    .scaleExtent([0.35, 16])
+    .wheelDelta(getWheelZoomDelta)
     .on('zoom', (event) => {
       forestGroup.attr('transform', event.transform);
     });
 
   svg.call(zoom);
+  svg.style('cursor', 'grab');
+  svg.on('mousedown', () => svg.style('cursor', 'grabbing'));
+  svg.on('mouseup', () => svg.style('cursor', 'grab'));
+  svg.on('mouseleave', () => svg.style('cursor', 'grab'));
 
   let currentOffsetX = 0;
   let overallMaxX = 0, overallMinY = Infinity, overallMaxY = -Infinity;
@@ -583,7 +541,7 @@ function renderForestLayout(
       minX = Math.min(minX, node.x - NODE_RADIUS - 20);
       maxX = Math.max(maxX, node.x + NODE_RADIUS + 20);
       minY = Math.min(minY, node.y - NODE_RADIUS - 20);
-      maxY = Math.max(maxY, node.y + NODE_RADIUS + 70);
+      maxY = Math.max(maxY, node.y + NODE_RADIUS + 58);
 
       if (node.data.spouses) {
         node.data.spouses.forEach((_, i) => {
@@ -637,7 +595,9 @@ function renderForestLayout(
   svg.attr('width', '100%');
   svg.attr('height', '100%');
   svg.style('max-width', '100%');
-  svg.style('height', 'auto');
+  svg.style('height', '100%');
+
+  return zoom;
 }
 
 function renderSVGLegend(g: d3.Selection<SVGGElement, unknown, null, undefined>, x: number, y: number) {
@@ -729,9 +689,9 @@ function renderTreeElements(
     .enter()
     .append('line')
     .attr('class', 'spouse-link')
-    .attr('x1', d => d.x1 + 25) // Start from edge of circle
+    .attr('x1', d => d.x1 + NODE_RADIUS)
     .attr('y1', d => d.y1)
-    .attr('x2', d => d.x2 - 25) // End at edge of circle
+    .attr('x2', d => d.x2 - NODE_RADIUS)
     .attr('y2', d => d.y2)
     .attr('stroke', '#e11d48') // Pink color for spouse connections
     .attr('stroke-width', 3)
@@ -747,42 +707,55 @@ function renderTreeElements(
     .style('cursor', 'pointer')
     .on('click', (event: MouseEvent, d: SpouseConnection) => {
       event.stopPropagation();
-      if (onPersonClick) {
+      if (onPersonClick && d.spouse) {
         onPersonClick(d.spouse, event);
       }
     });
 
   // Add spouse circles
   spouseNodes.append('circle')
-    .attr('r', 25)
+    .attr('r', NODE_RADIUS)
     .attr('fill', (d) => {
-      const gender = d.spouse.gender;
+      const gender = d.spouse?.gender;
       return gender === 'M' ? '#3B82F6' : gender === 'F' ? '#3CB030FF' : '#6B7280';
     })
     .attr('stroke', '#e11d48')
     .attr('stroke-width', 3)
     .on('mouseover', function () {
-      d3.select(this).attr('r', 30);
+      d3.select(this).attr('r', NODE_RADIUS + 4);
     })
     .on('mouseout', function () {
-      d3.select(this).attr('r', 25);
+      d3.select(this).attr('r', NODE_RADIUS);
     });
 
-  // Add spouse names
+  // Add spouse names inside circles
   spouseNodes.append('text')
-    .attr('dy', 45)
+    .attr('dy', 0)
     .attr('text-anchor', 'middle')
-    .text(d => `${d.spouse.full_name}`)
-    .attr('fill', '#374151')
-    .attr('font-size', '12px')
-    .attr('font-weight', '500');
+    .attr('fill', '#ffffff')
+    .attr('font-size', '11px')
+    .attr('font-weight', '700')
+    .each(function(d) {
+      const text = d3.select(this);
+      const lines = getNodeLabelLines(d.spouse?.full_name);
+      text.text(null);
+
+      lines.forEach((line, i) => {
+        text.append('tspan')
+          .attr('x', 0)
+          .attr('dy', lines.length === 1 ? '0.35em' : (i === 0 ? '-0.15em' : '1.15em'))
+          .text(line);
+      });
+    });
+
+  spouseNodes.append('title').text(d => d.spouse?.full_name || '');
 
   // Add spouse birth year if available
   spouseNodes.append('text')
-    .attr('dy', 60)
+    .attr('dy', NODE_RADIUS + 16)
     .attr('text-anchor', 'middle')
     .text(d => {
-      if (d.spouse.birth_date) {
+      if (d.spouse && d.spouse.birth_date) {
         const year = new Date(d.spouse.birth_date).getFullYear();
         return `(${year})`;
       }
@@ -797,7 +770,7 @@ function renderTreeElements(
     .enter()
     .append('path')
     .attr('class', 'link')
-    .attr('d', d3.linkVertical<any, TreeNode>()
+    .attr('d', d3.linkVertical<d3.HierarchyPointLink<VisualizationPerson>, TreeNode>()
       .x((d: TreeNode) => d.x)
       .y((d: TreeNode) => d.y)
     )
@@ -805,7 +778,6 @@ function renderTreeElements(
     .attr('stroke', '#ccc')
     .attr('stroke-width', 2);
 
-  console.log(treeData)
   // Draw person nodes
   const nodes = g.selectAll('.node')
     .data(treeData.descendants())
@@ -823,35 +795,48 @@ function renderTreeElements(
 
   // Add person circles
   nodes.append('circle')
-    .attr('r', 25)
+    .attr('r', NODE_RADIUS)
     .attr('fill', (d: TreeNode) => {
-      const gender = d.data.gender;
+      const gender = d.data?.gender;
       return gender === 'M' ? '#3B82F6' : gender === 'F' ? '#3CB030FF' : '#6B7280';
     })
     .attr('stroke', '#fff')
     .attr('stroke-width', 3)
     .on('mouseover', function () {
-      d3.select(this).attr('r', 30);
+      d3.select(this).attr('r', NODE_RADIUS + 4);
     })
     .on('mouseout', function () {
-      d3.select(this).attr('r', 25);
+      d3.select(this).attr('r', NODE_RADIUS);
     });
 
-  // Add person names
+  // Add person names inside circles
   nodes.append('text')
-    .attr('dy', 45)
+    .attr('dy', 0)
     .attr('text-anchor', 'middle')
-    .text((d: TreeNode) => `${d.data.full_name}`)
-    .attr('fill', '#374151')
-    .attr('font-size', '12px')
-    .attr('font-weight', '500');
+    .attr('fill', '#ffffff')
+    .attr('font-size', '11px')
+    .attr('font-weight', '700')
+    .each(function(d: TreeNode) {
+      const text = d3.select(this);
+      const lines = getNodeLabelLines(d.data?.full_name);
+      text.text(null);
+
+      lines.forEach((line, i) => {
+        text.append('tspan')
+          .attr('x', 0)
+          .attr('dy', lines.length === 1 ? '0.35em' : (i === 0 ? '-0.15em' : '1.15em'))
+          .text(line);
+      });
+    });
+
+  nodes.append('title').text((d: TreeNode) => d.data?.full_name || '');
 
   // Add birth year if available
   nodes.append('text')
-    .attr('dy', 60)
+    .attr('dy', NODE_RADIUS + 16)
     .attr('text-anchor', 'middle')
     .text((d: TreeNode) => {
-      if (d.data.birth_date) {
+      if (d.data && d.data.birth_date) {
         const year = new Date(d.data.birth_date).getFullYear();
         return `(${year})`;
       }
