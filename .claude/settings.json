@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose exec backend *)",
+      "Bash(docker-compose exec frontend *)",
+      "Bash(docker-compose up*)",
+      "Bash(docker-compose logs*)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)"
+    ]
+  }
+}
