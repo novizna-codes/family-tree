@@ -41,6 +41,23 @@ class User extends Authenticatable
         return $this->hasMany(FamilyTree::class);
     }
 
+    public function ownedGroups()
+    {
+        return $this->hasMany(UserGroup::class, 'owner_user_id');
+    }
+
+    public function groupMemberships()
+    {
+        return $this->belongsToMany(UserGroup::class, 'user_group_members', 'user_id', 'user_group_id')
+            ->using(UserGroupMember::class)
+            ->withTimestamps();
+    }
+
+    public function ownedPeople()
+    {
+        return $this->hasMany(Person::class, 'owner_user_id');
+    }
+
     public function isAdmin(): bool
     {
         return $this->hasRole(RoleEnum::ADMIN->value);

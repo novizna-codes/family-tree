@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Person extends Model
@@ -13,6 +14,7 @@ class Person extends Model
 
     protected $fillable = [
         'family_tree_id',
+        'owner_user_id',
         'first_name',
         'last_name',
         'maiden_name',
@@ -48,32 +50,70 @@ class Person extends Model
     protected static function booted()
     {
         static::deleting(function ($person) {
-            // Only perform cleanup if we are force deleting
-//            if ($person->isForceDeleting()) {
-                // Prevent deletion if the person has children (including soft-deleted)
-                $hasChildren = Person::where(function ($query) use ($person) {
-                        $query->where('father_id', $person->id)
-                              ->orWhere('mother_id', $person->id);
-                    })->exists();
+            if (!$person->isForceDeleting()) {
+                // For soft delete, preserve lineage and relationships.
+                return;
+            }
 
-                if ($hasChildren) {
-                    throw new \Exception("Cannot force delete person because they have children. Delete the children first.");
-                }
+            // Prevent force delete if the person has children.
+            $hasChildren = Person::where(function ($query) use ($person) {
+                $query->where('father_id', $person->id)
+                    ->orWhere('mother_id', $person->id);
+            })->exists();
 
-                // Cleanup relationships when a person is deleted
-                $person->getAllSpouseRelationships()->delete();
+            if ($hasChildren) {
+                throw new \Exception('Cannot force delete person because they have children. Delete the children first.');
+            }
 
-                // Clear parent IDs for any other people
-                Person::where('father_id', $person->id)->update(['father_id' => null]);
-                Person::where('mother_id', $person->id)->update(['mother_id' => null]);
-//            }
-            // For soft delete, we keep the record and its IDs intact to preserve lineage
+            // Remove spouse relationships only on force delete.
+            $person->getAllSpouseRelationships()->delete();
+
+            // Clear parent links only on force delete.
+            Person::where('father_id', $person->id)->update(['father_id' => null]);
+            Person::where('mother_id', $person->id)->update(['mother_id' => null]);
         });
     }
 
     public function familyTree()
     {
         return $this->belongsTo(FamilyTree::class);
+    }
+
+    public function owner()
+    {
+        return $this->belongsTo(User::class, 'owner_user_id');
+    }
+
+    public function shareGroups()
+    {
+        return $this->belongsToMany(UserGroup::class, 'people_share_groups', 'person_id', 'user_group_id')
+            ->using(PeopleShareGroup::class)
+            ->withTimestamps();
+    }
+
+    public function scopeAccessibleBy(Builder $query, User $user): Builder
+    {
+        return $query->where(function (Builder $builder) use ($user) {
+            $builder->where('owner_user_id', $user->id)
+                ->orWhereHas('shareGroups.members', function (Builder $memberQuery) use ($user) {
+                    $memberQuery->where('users.id', $user->id);
+                });
+        });
+    }
+
+    public function treeMemberships()
+    {
+        return $this->hasMany(TreePerson::class);
+    }
+
+    public function parentEdges()
+    {
+        return $this->hasMany(TreeEdge::class, 'parent_person_id');
+    }
+
+    public function childEdges()
+    {
+        return $this->hasMany(TreeEdge::class, 'child_person_id');
     }
 
     public function father()

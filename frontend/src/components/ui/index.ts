@@ -5,3 +5,4 @@ export { Textarea } from './Textarea';
 export { Checkbox } from './Checkbox';
 export { RadioGroup } from './RadioGroup';
 export { LanguageSwitcher } from './LanguageSwitcher';
+export { PersonSearchSelect } from './PersonSearchSelect';

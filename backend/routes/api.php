@@ -52,6 +52,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/trees/{familyTree}/export', [FamilyTreeController::class, 'export']);
 
     // People routes
+    Route::get('/people/search', [PersonController::class, 'search']);
+    Route::post('/people/merge/preview', [PersonController::class, 'mergePreview']);
+    Route::post('/people/merge', [PersonController::class, 'merge']);
     Route::get('/trees/{familyTree}/people', [PersonController::class, 'index']);
     Route::post('/trees/{familyTree}/people', [PersonController::class, 'store']);
     Route::get('/trees/{familyTree}/people/{person}', [PersonController::class, 'show']);

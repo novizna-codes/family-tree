@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeftIcon, UserPlusIcon, PresentationChartLineIcon, ListBulletIcon, LinkIcon, PrinterIcon, PencilIcon, TrashIcon, XMarkIcon, ClipboardIcon } from '@heroicons/react/24/outline';
+import { ChevronLeftIcon, UserPlusIcon, PresentationChartLineIcon, ListBulletIcon, LinkIcon, PrinterIcon, PencilIcon, TrashIcon, XMarkIcon, ClipboardIcon, UsersIcon } from '@heroicons/react/24/outline';
 import { treeService } from '@/services/treeService';
+import { ApiError } from '@/services/api';
 import toast from 'react-hot-toast';
 import { TreeVisualization } from '@/components/trees/TreeVisualization';
 import { RelationshipModal } from '@/components/trees/RelationshipModal';
@@ -11,19 +12,22 @@ import { DeletePersonModal } from '@/components/trees/DeletePersonModal';
 import { PrintModal } from '@/components/trees/PrintModal';
 import { CopyPersonModal } from '@/components/trees/CopyPersonModal';
 import { RelationshipEditModal } from '@/components/trees/RelationshipEditModal';
+import { MergePeopleModal } from '@/components/trees/MergePeopleModal';
 import { Button } from '@/components/ui/Button';
 import { useAuthStore } from '@/store/authStore';
-import type { Person, VisualizationPerson } from '@/types';
+import type { Person, PersonSpouse, VisualizationPerson } from '@/types';
 import type { Relationship } from '@/services/familyTreeService';
 
 type ViewMode = 'list' | 'tree';
 
 export const TreeViewPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const focusPersonId = searchParams.get('focusPersonId') ?? undefined;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, logout } = useAuthStore();
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>(focusPersonId ? 'tree' : 'list');
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [relationshipModalOpen, setRelationshipModalOpen] = useState(false);
   const [relationshipPerson, setRelationshipPerson] = useState<Person | null>(null);
@@ -36,9 +40,21 @@ export const TreeViewPage: React.FC = () => {
   const [relationshipToEdit, setRelationshipToEdit] = useState<(Relationship & { personId?: string }) | null>(null);
   const [copyModalOpen, setCopyModalOpen] = useState(false);
   const [relEditModalOpen, setRelEditModalOpen] = useState(false);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [personToMergeKeep, setPersonToMergeKeep] = useState<Person | null>(null);
   const [showOverlays, setShowOverlays] = useState(true);
   const [showNavigationHelp, setShowNavigationHelp] = useState(true);
   const treeElementRef = useRef<HTMLDivElement>(null);
+
+  type CompactRelationship = PersonSpouse['relationship'] & {
+    person1_id?: string;
+    person2_id?: string;
+    marriage_place?: string | null;
+    notes?: string | null;
+    person1?: Person;
+    person2?: Person;
+  };
+  type EditableRelationshipInput = Relationship | CompactRelationship;
 
   const { data: tree, isLoading: treeLoading, error: treeError } = useQuery({
     queryKey: ['tree', id],
@@ -47,9 +63,14 @@ export const TreeViewPage: React.FC = () => {
     retry: false,
   });
 
-  const { data: visualization, isLoading: visualizationLoading } = useQuery({
-    queryKey: ['tree', id, 'visualization'],
-    queryFn: () => treeService.getVisualization(id!),
+  const {
+    data: visualization,
+    isLoading: visualizationLoading,
+    error: visualizationError,
+    refetch: refetchVisualization,
+  } = useQuery({
+    queryKey: ['tree', id, 'visualization', focusPersonId],
+    queryFn: () => treeService.getVisualization(id!, focusPersonId),
     enabled: !!id,
   });
 
@@ -65,7 +86,7 @@ export const TreeViewPage: React.FC = () => {
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Error Loading Tree</h2>
           <p className="text-gray-600 mb-6">
-            {(treeError as Error & { response?: { status: number } })?.response?.status === 404
+            {treeError instanceof ApiError && (treeError.status === 404 || treeError.status === 403)
               ? "The family tree you're looking for doesn't exist or you don't have permission to view it."
               : "An unexpected error occurred while loading the family tree."}
           </p>
@@ -84,6 +105,37 @@ export const TreeViewPage: React.FC = () => {
           <div className="animate-pulse">
             <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
             <div className="h-96 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (visualizationError) {
+    const visualizationErrorMessage =
+      visualizationError instanceof ApiError && visualizationError.status === 403
+        ? "You don't have permission to view this tree visualization."
+        : visualizationError instanceof ApiError && visualizationError.status === 404
+          ? "The requested tree visualization was not found."
+          : visualizationError instanceof ApiError && visualizationError.status === 422
+            ? 'The tree visualization data is invalid. Please refresh and try again.'
+            : 'An unexpected error occurred while loading the tree visualization.';
+
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+          <div className="text-red-500 mb-4">
+            <XMarkIcon className="h-12 w-12 mx-auto" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Error Loading Visualization</h2>
+          <p className="text-gray-600 mb-6">{visualizationErrorMessage}</p>
+          <div className="space-y-3">
+            <Button onClick={() => void refetchVisualization()} variant="primary" className="w-full">
+              Retry
+            </Button>
+            <Button onClick={() => navigate('/dashboard')} variant="outline" className="w-full">
+              Back to Dashboard
+            </Button>
           </div>
         </div>
       </div>
@@ -151,9 +203,29 @@ export const TreeViewPage: React.FC = () => {
     setCopyModalOpen(true);
   };
 
-  const handleOpenRelEditModal = (relationship: any, personId: string) => {
-    setRelationshipToEdit({ ...relationship, personId });
+  const handleOpenRelEditModal = (relationship: EditableRelationshipInput, personId: string) => {
+    const normalizedRelationship: Relationship = 'relationship_type' in relationship
+      ? relationship
+      : {
+        id: relationship.id,
+        person1_id: relationship.person1_id ?? personId,
+        person2_id: relationship.person2_id ?? '',
+        relationship_type: relationship.type,
+        start_date: relationship.start_date ?? undefined,
+        end_date: relationship.end_date ?? undefined,
+        marriage_place: relationship.marriage_place ?? undefined,
+        notes: relationship.notes ?? undefined,
+        person1: relationship.person1,
+        person2: relationship.person2,
+      };
+
+    setRelationshipToEdit({ ...normalizedRelationship, personId });
     setRelEditModalOpen(true);
+  };
+
+  const handleOpenMergeModal = (person: Person) => {
+    setPersonToMergeKeep(person);
+    setMergeModalOpen(true);
   };
 
   const handleUnlinkParent = async (personId: string, parentType: 'father' | 'mother') => {
@@ -167,19 +239,6 @@ export const TreeViewPage: React.FC = () => {
       }
     }
   };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-            <div className="h-96 bg-gray-200 rounded"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (!tree) {
     return (
@@ -278,6 +337,12 @@ export const TreeViewPage: React.FC = () => {
                 <Button>
                   <UserPlusIcon className="h-4 w-4 mr-2" />
                   Add Person
+                </Button>
+              </Link>
+              <Link to={`/trees/${id}/people`}>
+                <Button variant="outline">
+                  <UsersIcon className="h-4 w-4 mr-2" />
+                  People
                 </Button>
               </Link>
 
@@ -665,6 +730,13 @@ export const TreeViewPage: React.FC = () => {
                     <ClipboardIcon className="h-4 w-4 mr-1" />
                     Copy
                   </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => handleOpenMergeModal(selectedPerson)}
+                    className="text-sm"
+                  >
+                    Merge
+                  </Button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -736,6 +808,15 @@ export const TreeViewPage: React.FC = () => {
           isOpen={copyModalOpen}
           onClose={() => setCopyModalOpen(false)}
           person={personToCopy}
+          currentTreeId={id!}
+        />
+      )}
+
+      {mergeModalOpen && personToMergeKeep && (
+        <MergePeopleModal
+          isOpen={mergeModalOpen}
+          onClose={() => setMergeModalOpen(false)}
+          keepPerson={personToMergeKeep}
           currentTreeId={id!}
         />
       )}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { XMarkIcon, UserPlusIcon } from '@heroicons/react/24/outline';
-import { Button, Select } from '../ui';
+import { Button, PersonSearchSelect, Select } from '../ui';
 import { PersonForm, RelationshipForm } from '../forms';
 import { treeService } from '@/services/treeService';
 import toast from 'react-hot-toast';
@@ -339,19 +339,13 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
                 ) : (
                   // Dropdown for selecting existing person + relationship details
                   <div className="space-y-4">
-                    <Select
+                    <PersonSearchSelect
                       label="Select Spouse"
-                      name="spouse_id"
                       value={selectedPersonId}
-                      onChange={(e) => setSelectedPersonId(e.target.value)}
+                      onChange={setSelectedPersonId}
+                      people={availablePeople}
+                      placeholder="Choose a person..."
                       disabled={addRelationshipMutation.isPending}
-                      options={[
-                        { value: '', label: 'Choose a person...' },
-                        ...availablePeople.map((p) => ({
-                          value: p.id,
-                          label: `${p.full_name}${p.birth_date ? ` (${new Date(p.birth_date).getFullYear()})` : ''}`
-                        }))
-                      ]}
                     />
 
                     {availablePeople.length === 0 && (
@@ -413,19 +407,13 @@ export function RelationshipModal({ isOpen, onClose, person, treeId }: Relations
                 ) : (
                   // Dropdown for selecting existing person
                   <div>
-                    <Select
+                    <PersonSearchSelect
                       label={`Select ${activeTab === 'parent' ? 'Parent' : 'Child'}`}
-                      name="person_id"
                       value={selectedPersonId}
-                      onChange={(e) => setSelectedPersonId(e.target.value)}
+                      onChange={setSelectedPersonId}
+                      people={availablePeople}
+                      placeholder="Choose a person..."
                       disabled={addRelationshipMutation.isPending}
-                      options={[
-                        { value: '', label: 'Choose a person...' },
-                        ...availablePeople.map((p) => ({
-                          value: p.id,
-                          label: `${p.full_name}${p.birth_date ? ` (${new Date(p.birth_date).getFullYear()})` : ''}`
-                        }))
-                      ]}
                     />
 
                     {availablePeople.length === 0 && (

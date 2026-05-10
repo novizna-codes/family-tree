@@ -45,6 +45,16 @@ class FamilyTree extends Model
         return $this->belongsTo(Person::class, 'root_person_id');
     }
 
+    public function treePeople()
+    {
+        return $this->hasMany(TreePerson::class, 'tree_id');
+    }
+
+    public function treeEdges()
+    {
+        return $this->hasMany(TreeEdge::class, 'tree_id');
+    }
+
     public function getDefaultSettings(): array
     {
         return [

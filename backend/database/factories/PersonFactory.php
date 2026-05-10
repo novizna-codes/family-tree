@@ -14,6 +14,9 @@ class PersonFactory extends Factory
     {
         return [
             'family_tree_id' => FamilyTree::factory(),
+            'owner_user_id' => function (array $attributes) {
+                return FamilyTree::findOrFail($attributes['family_tree_id'])->user_id;
+            },
             'first_name' => $this->faker->firstName(),
             'last_name' => $this->faker->lastName(),
             'gender' => $this->faker->randomElement(['M', 'F', 'O']),

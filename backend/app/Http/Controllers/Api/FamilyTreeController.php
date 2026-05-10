@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\FamilyTree;
+use App\Models\Person;
+use App\Models\TreeEdge;
+use App\Models\TreePerson;
 use Illuminate\Http\Request;
 
 class FamilyTreeController extends Controller
@@ -42,13 +45,24 @@ class FamilyTreeController extends Controller
     {
         $this->authorize('view', $familyTree);
 
+        $memberPersonIds = TreePerson::query()
+            ->where('tree_id', $familyTree->id)
+            ->pluck('person_id');
+
+        $people = Person::query()
+            ->accessibleBy($request->user())
+            ->where(function ($query) use ($memberPersonIds, $familyTree) {
+                $query->whereIn('id', $memberPersonIds)
+                    ->orWhere('family_tree_id', $familyTree->id);
+            })
+            ->with(['father', 'mother'])
+            ->get();
+
         $tree = $familyTree->load([
-            'people' => function ($query) {
-                $query->with(['father', 'mother']);
-            },
             'relationships.person1',
             'relationships.person2',
         ]);
+        $tree->setRelation('people', $people);
 
         return response()->json([
             'data' => $tree,
@@ -89,10 +103,67 @@ class FamilyTreeController extends Controller
         $this->authorize('view', $familyTree);
 
         $focusPersonId = $request->query('focus_person_id');
-        
-        $people = $familyTree->people()
+
+        $memberPersonIds = TreePerson::query()
+            ->where('tree_id', $familyTree->id)
+            ->pluck('person_id');
+
+        $people = Person::query()
+            ->accessibleBy($request->user())
+            ->where(function ($query) use ($memberPersonIds, $familyTree) {
+                $query->whereIn('id', $memberPersonIds)
+                    ->orWhere('family_tree_id', $familyTree->id);
+            })
             ->with(['father', 'mother'])
             ->get();
+
+        $personIds = $people->pluck('id')->values();
+
+        $treeEdges = TreeEdge::query()
+            ->where('tree_id', $familyTree->id)
+            ->whereIn('child_person_id', $personIds)
+            ->whereIn('parent_role', ['father', 'mother'])
+            ->get();
+
+        if ($treeEdges->isNotEmpty()) {
+            $parentIds = $treeEdges->pluck('parent_person_id')->unique()->values();
+            $parentsById = Person::query()
+                ->accessibleBy($request->user())
+                ->whereIn('id', $parentIds)
+                ->get()
+                ->keyBy('id');
+
+            foreach ($people as $person) {
+                $hasTreeParentEdge = $treeEdges->contains(function (TreeEdge $edge) use ($person) {
+                    return $edge->child_person_id === $person->id;
+                });
+
+                if ($hasTreeParentEdge) {
+                    $person->setAttribute('father_id', null);
+                    $person->setAttribute('mother_id', null);
+                    $person->setRelation('father', null);
+                    $person->setRelation('mother', null);
+                }
+
+                $fatherEdge = $treeEdges->first(function (TreeEdge $edge) use ($person) {
+                    return $edge->child_person_id === $person->id && $edge->parent_role === 'father';
+                });
+
+                $motherEdge = $treeEdges->first(function (TreeEdge $edge) use ($person) {
+                    return $edge->child_person_id === $person->id && $edge->parent_role === 'mother';
+                });
+
+                if ($fatherEdge) {
+                    $person->setAttribute('father_id', $fatherEdge->parent_person_id);
+                    $person->setRelation('father', $parentsById->get($fatherEdge->parent_person_id));
+                }
+
+                if ($motherEdge) {
+                    $person->setAttribute('mother_id', $motherEdge->parent_person_id);
+                    $person->setRelation('mother', $parentsById->get($motherEdge->parent_person_id));
+                }
+            }
+        }
 
         $relationships = $familyTree->relationships()
             ->with(['person1', 'person2'])

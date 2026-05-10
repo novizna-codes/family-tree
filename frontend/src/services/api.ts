@@ -1,5 +1,17 @@
 import { config } from '../config';
 
+export class ApiError extends Error {
+  status: number;
+  errors?: Record<string, string[]>;
+
+  constructor(message: string, status: number, errors?: Record<string, string[]>) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.errors = errors;
+  }
+}
+
 class ApiService {
   private baseURL = config.API_URL + '/api';
   private token: string | null = null;
@@ -32,30 +44,45 @@ class ApiService {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: 'Network error' }));
-      throw new Error(error.message || 'Request failed');
+      const message =
+        typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
+          ? error.message
+          : 'Request failed';
+      const errors =
+        typeof error === 'object' && error !== null && 'errors' in error && typeof error.errors === 'object'
+          ? (error.errors as Record<string, string[]>)
+          : undefined;
+
+      throw new ApiError(message, response.status, errors);
     }
 
     const data = await response.json();
     return data;
   }
 
-  async get<T>(endpoint: string, options?: { params?: Record<string, any> }): Promise<T> {
+  async get<T>(endpoint: string, options?: { params?: Record<string, string | number | boolean | null | undefined> }): Promise<T> {
     let url = endpoint;
     if (options?.params) {
-      const searchParams = new URLSearchParams(options.params);
+      const params = Object.entries(options.params).reduce<Record<string, string>>((acc, [key, value]) => {
+        if (value !== undefined && value !== null) {
+          acc[key] = String(value);
+        }
+        return acc;
+      }, {});
+      const searchParams = new URLSearchParams(params);
       url += `?${searchParams.toString()}`;
     }
     return this.request<T>(url, { method: 'GET' });
   }
 
-  async post<T>(endpoint: string, data?: any): Promise<T> {
+  async post<T>(endpoint: string, data?: unknown): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     });
   }
 
-  async put<T>(endpoint: string, data?: any): Promise<T> {
+  async put<T>(endpoint: string, data?: unknown): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { treeService } from '@/services/treeService';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { PersonSearchSelect } from '@/components/ui/PersonSearchSelect';
 import type { CreatePersonData } from '@/services/familyTreeService';
 
 export const AddPersonPage: React.FC = () => {
@@ -88,13 +89,18 @@ export const AddPersonPage: React.FC = () => {
       setError(null);
 
       const personData: Partial<CreatePersonData> = {};
-      Object.entries(formData).forEach(([key, value]) => {
-        // Skip empty values
-        if (value === '' || value === null || value === undefined) {
-          return;
-        }
-        (personData as any)[key] = value;
-      });
+      if (formData.first_name) personData.first_name = formData.first_name;
+      if (formData.last_name) personData.last_name = formData.last_name;
+      if (formData.maiden_name) personData.maiden_name = formData.maiden_name;
+      if (formData.nickname) personData.nickname = formData.nickname;
+      if (formData.gender) personData.gender = formData.gender as 'M' | 'F' | 'O';
+      if (formData.birth_date) personData.birth_date = formData.birth_date;
+      if (formData.death_date) personData.death_date = formData.death_date;
+      if (formData.birth_place) personData.birth_place = formData.birth_place;
+      if (formData.death_place) personData.death_place = formData.death_place;
+      if (formData.notes) personData.notes = formData.notes;
+      if (formData.father_id) personData.father_id = formData.father_id;
+      if (formData.mother_id) personData.mother_id = formData.mother_id;
 
       // If death_date is empty, ensure death_place is also empty
       if (!personData.death_date) {
@@ -286,47 +292,27 @@ export const AddPersonPage: React.FC = () => {
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Family Relationships</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label htmlFor="father_id" className="block text-sm font-medium text-gray-700 mb-1">
-                      Father
-                    </label>
-                    <select
+                    <PersonSearchSelect
                       id="father_id"
-                      name="father_id"
+                      label="Father"
                       value={formData.father_id}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select father (optional)</option>
-                      {people
-                        .filter(person => person.gender === 'M' || !person.gender)
-                        .map(person => (
-                          <option key={person.id} value={person.id}>
-                            {person.full_name}
-                          </option>
-                        ))}
-                    </select>
+                      onChange={(selectedId) => setFormData((prev) => ({ ...prev, father_id: selectedId }))}
+                      people={people}
+                      placeholder="Select father (optional)"
+                      filter={(candidate) => candidate.gender === 'M' || !candidate.gender}
+                    />
                   </div>
 
                   <div>
-                    <label htmlFor="mother_id" className="block text-sm font-medium text-gray-700 mb-1">
-                      Mother
-                    </label>
-                    <select
+                    <PersonSearchSelect
                       id="mother_id"
-                      name="mother_id"
+                      label="Mother"
                       value={formData.mother_id}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Select mother (optional)</option>
-                      {people
-                        .filter(person => person.gender === 'F' || !person.gender)
-                        .map(person => (
-                          <option key={person.id} value={person.id}>
-                            {person.full_name}
-                          </option>
-                        ))}
-                    </select>
+                      onChange={(selectedId) => setFormData((prev) => ({ ...prev, mother_id: selectedId }))}
+                      people={people}
+                      placeholder="Select mother (optional)"
+                      filter={(candidate) => candidate.gender === 'F' || !candidate.gender}
+                    />
                   </div>
                 </div>
               </div>

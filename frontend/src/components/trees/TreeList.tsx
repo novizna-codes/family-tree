@@ -77,18 +77,26 @@ export const TreeList: React.FC<TreeListProps> = ({
               </div>
             </div>
             
-            <div className="mt-4 flex space-x-2">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
               <Link
                 to={`/trees/${tree.id}`}
-                className="flex-1"
+                className="w-full"
               >
                 <Button variant="outline" className="w-full">
                   View Tree
                 </Button>
               </Link>
               <Link
+                to={`/trees/${tree.id}/people`}
+                className="w-full"
+              >
+                <Button variant="outline" className="w-full">
+                  People
+                </Button>
+              </Link>
+              <Link
                 to={`/trees/${tree.id}/edit`}
-                className="flex-1"
+                className="w-full"
               >
                 <Button className="w-full">
                   Edit

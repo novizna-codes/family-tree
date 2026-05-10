@@ -13,6 +13,7 @@ import { SetupPage } from '@/pages/auth/SetupPage';
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
 import { TreeViewPage } from '@/pages/trees/TreeViewPage';
 import { AddPersonPage } from '@/pages/trees/AddPersonPage';
+import { PeopleListPage } from '@/pages/trees/PeopleListPage';
 
 // Admin Pages
 import { AdminDashboardPage } from '@/pages/admin/AdminDashboardPage';
@@ -80,6 +81,16 @@ export const router = createBrowserRouter([
       <SetupGuard>
         <AuthGuard>
           <AddPersonPage />
+        </AuthGuard>
+      </SetupGuard>
+    ),
+  },
+  {
+    path: '/trees/:id/people',
+    element: (
+      <SetupGuard>
+        <AuthGuard>
+          <PeopleListPage />
         </AuthGuard>
       </SetupGuard>
     ),

@@ -11,7 +11,7 @@ interface LocalRelationship {
   id: string;
   person1_id: string;
   person2_id: string;
-  relationship_type: string;
+  relationship_type: 'spouse' | 'partner' | 'divorced' | 'separated';
   relationship_role?: string;
 }
 
@@ -30,6 +30,16 @@ const SPOUSE_SPACING = 130;
 const HORIZONTAL_SPACING = 150; // Reduced from 180
 const VERTICAL_SPACING = 150; // Reduced from 150
 const WHEEL_ZOOM_SENSITIVITY = 0.0003;
+
+function getDisplayName(person?: Pick<Person, 'full_name' | 'first_name' | 'last_name'>): string {
+  if (!person) return '';
+  if (person.full_name?.trim()) return person.full_name;
+
+  return [person.first_name, person.last_name]
+    .filter((part): part is string => Boolean(part?.trim()))
+    .join(' ')
+    .trim();
+}
 
 function getNodeLabelLines(fullName?: string): string[] {
   if (!fullName) return [''];
@@ -78,6 +88,23 @@ function getNodeLabelLines(fullName?: string): string[] {
 function getWheelZoomDelta(event: WheelEvent): number {
   const modeFactor = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 120 : 1;
   return -event.deltaY * modeFactor * WHEEL_ZOOM_SENSITIVITY;
+}
+
+function buildNodeAriaLabel(person?: Pick<Person, 'full_name' | 'first_name' | 'last_name' | 'birth_date'>): string {
+  const name = getDisplayName(person);
+  const hasBirthDate = Boolean(person?.birth_date);
+
+  if (!name && !hasBirthDate) return 'Family member node';
+  if (!hasBirthDate) return `Family member: ${name}`;
+
+  const year = new Date(person?.birth_date as string).getFullYear();
+  return Number.isNaN(year)
+    ? `Family member: ${name}`
+    : `Family member: ${name}, born ${year}`;
+}
+
+function isActivationKey(event: KeyboardEvent): boolean {
+  return event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar';
 }
 
 export function TreeVisualization({ 
@@ -135,26 +162,29 @@ export function TreeVisualization({
 
   const handleZoomIn = () => {
     if (!svgRef.current || !zoomBehaviorRef.current) return;
-    d3.select(svgRef.current)
+    const transition = d3.select(svgRef.current)
       .transition()
-      .duration(220)
-      .call(zoomBehaviorRef.current.scaleBy as any, 1.2);
+      .duration(220);
+
+    zoomBehaviorRef.current.scaleBy(transition, 1.2);
   };
 
   const handleZoomOut = () => {
     if (!svgRef.current || !zoomBehaviorRef.current) return;
-    d3.select(svgRef.current)
+    const transition = d3.select(svgRef.current)
       .transition()
-      .duration(220)
-      .call(zoomBehaviorRef.current.scaleBy as any, 0.8);
+      .duration(220);
+
+    zoomBehaviorRef.current.scaleBy(transition, 0.8);
   };
 
   const handleResetView = () => {
     if (!svgRef.current || !zoomBehaviorRef.current) return;
-    d3.select(svgRef.current)
+    const transition = d3.select(svgRef.current)
       .transition()
-      .duration(250)
-      .call(zoomBehaviorRef.current.transform as any, d3.zoomIdentity);
+      .duration(250);
+
+    zoomBehaviorRef.current.transform(transition, d3.zoomIdentity);
   };
 
   return (
@@ -240,14 +270,19 @@ function createMultipleHierarchies(people: Person[], relationships: LocalRelatio
 
   // Build spouse relationships
   relationships.forEach(relationship => {
-    if (relationship.relationship_type === 'spouse') {
+    if (['spouse', 'partner', 'divorced', 'separated'].includes(relationship.relationship_type)) {
       const person1 = personMap.get(relationship.person1_id);
       const person2 = personMap.get(relationship.person2_id);
 
       if (person1 && person2) {
-        // Add each as spouse of the other
-        person1.spouses.push(person2);
-        person2.spouses.push(person1);
+        // Add each as spouse of the other without duplicates
+        if (!person1.spouses.some(spouse => spouse.id === person2.id)) {
+          person1.spouses.push(person2);
+        }
+
+        if (!person2.spouses.some(spouse => spouse.id === person1.id)) {
+          person2.spouses.push(person1);
+        }
       }
     }
   });
@@ -703,6 +738,9 @@ function renderTreeElements(
     .enter()
     .append('g')
     .attr('class', 'spouse-node')
+    .attr('role', 'button')
+    .attr('tabindex', 0)
+    .attr('aria-label', (d: SpouseConnection) => buildNodeAriaLabel(d.spouse))
     .attr('transform', d => `translate(${d.x2}, ${d.y2})`)
     .style('cursor', 'pointer')
     .on('click', (event: MouseEvent, d: SpouseConnection) => {
@@ -710,7 +748,34 @@ function renderTreeElements(
       if (onPersonClick && d.spouse) {
         onPersonClick(d.spouse, event);
       }
+    })
+    .on('keydown', (event: KeyboardEvent, d: SpouseConnection) => {
+      if (!isActivationKey(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (onPersonClick && d.spouse) {
+        onPersonClick(d.spouse);
+      }
+    })
+    .on('focus', function () {
+      const node = d3.select(this);
+      node.classed('is-focused', true);
+      node.select<SVGCircleElement>('circle.focus-ring').attr('opacity', 1);
+    })
+    .on('blur', function () {
+      const node = d3.select(this);
+      node.classed('is-focused', false);
+      node.select<SVGCircleElement>('circle.focus-ring').attr('opacity', 0);
     });
+
+  spouseNodes.append('circle')
+    .attr('class', 'focus-ring')
+    .attr('r', NODE_RADIUS + 8)
+    .attr('fill', 'none')
+    .attr('stroke', '#2563eb')
+    .attr('stroke-width', 4)
+    .attr('opacity', 0)
+    .style('pointer-events', 'none');
 
   // Add spouse circles
   spouseNodes.append('circle')
@@ -737,7 +802,7 @@ function renderTreeElements(
     .attr('font-weight', '700')
     .each(function(d) {
       const text = d3.select(this);
-      const lines = getNodeLabelLines(d.spouse?.full_name);
+      const lines = getNodeLabelLines(getDisplayName(d.spouse));
       text.text(null);
 
       lines.forEach((line, i) => {
@@ -748,7 +813,7 @@ function renderTreeElements(
       });
     });
 
-  spouseNodes.append('title').text(d => d.spouse?.full_name || '');
+  spouseNodes.append('title').text(d => getDisplayName(d.spouse));
 
   // Add spouse birth year if available
   spouseNodes.append('text')
@@ -784,6 +849,9 @@ function renderTreeElements(
     .enter()
     .append('g')
     .attr('class', 'node')
+    .attr('role', 'button')
+    .attr('tabindex', 0)
+    .attr('aria-label', (d: TreeNode) => buildNodeAriaLabel(d.data))
     .attr('transform', (d: TreeNode) => `translate(${d.x}, ${d.y})`)
     .style('cursor', 'pointer')
     .on('click', (event: MouseEvent, d: TreeNode) => {
@@ -791,7 +859,34 @@ function renderTreeElements(
       if (onPersonClick) {
         onPersonClick(d.data, event);
       }
+    })
+    .on('keydown', (event: KeyboardEvent, d: TreeNode) => {
+      if (!isActivationKey(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (onPersonClick) {
+        onPersonClick(d.data);
+      }
+    })
+    .on('focus', function () {
+      const node = d3.select(this);
+      node.classed('is-focused', true);
+      node.select<SVGCircleElement>('circle.focus-ring').attr('opacity', 1);
+    })
+    .on('blur', function () {
+      const node = d3.select(this);
+      node.classed('is-focused', false);
+      node.select<SVGCircleElement>('circle.focus-ring').attr('opacity', 0);
     });
+
+  nodes.append('circle')
+    .attr('class', 'focus-ring')
+    .attr('r', NODE_RADIUS + 8)
+    .attr('fill', 'none')
+    .attr('stroke', '#2563eb')
+    .attr('stroke-width', 4)
+    .attr('opacity', 0)
+    .style('pointer-events', 'none');
 
   // Add person circles
   nodes.append('circle')
@@ -818,7 +913,7 @@ function renderTreeElements(
     .attr('font-weight', '700')
     .each(function(d: TreeNode) {
       const text = d3.select(this);
-      const lines = getNodeLabelLines(d.data?.full_name);
+      const lines = getNodeLabelLines(getDisplayName(d.data));
       text.text(null);
 
       lines.forEach((line, i) => {
@@ -829,7 +924,7 @@ function renderTreeElements(
       });
     });
 
-  nodes.append('title').text((d: TreeNode) => d.data?.full_name || '');
+  nodes.append('title').text((d: TreeNode) => getDisplayName(d.data));
 
   // Add birth year if available
   nodes.append('text')
@@ -844,4 +939,5 @@ function renderTreeElements(
     })
     .attr('fill', '#6B7280')
     .attr('font-size', '10px');
+
 }
