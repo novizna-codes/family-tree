@@ -1,5 +1,16 @@
-import { api } from './api';
-import type { FamilyTree, Person } from '@/types';
+import { api, ApiError } from './api';
+import type {
+  FamilyTree,
+  Person,
+  PaginatedApiResponse,
+  CopyPersonRequest,
+  CopyPersonResponse,
+  MergePeoplePayload,
+  MergePeoplePreviewPayload,
+  MergePeopleResult,
+  MergePeoplePreview,
+  SearchPeopleOptions,
+} from '@/types';
 
 // Re-export main types for convenience
 export type { FamilyTree, Person } from '@/types';
@@ -135,6 +146,14 @@ export interface Relationship {
   person2?: Person;
 }
 
+export interface GetPeopleParams {
+  paginate?: boolean;
+  page?: number;
+  per_page?: number;
+  search?: string;
+  sort?: 'name_asc' | 'created_desc';
+}
+
 class FamilyTreeService {
   async getFamilyTrees(): Promise<FamilyTree[]> {
     const response = await api.get<{ data: FamilyTree[] }>('/trees');
@@ -160,9 +179,18 @@ class FamilyTreeService {
     await api.delete(`/trees/${id}`);
   }
 
-  async getPeople(treeId: string): Promise<Person[]> {
-    const response = await api.get<{ data: Person[] }>(`/trees/${treeId}/people`);
-    return response.data;
+  async getPeople(treeId: string): Promise<Person[]>;
+  async getPeople(treeId: string, params: GetPeopleParams & { paginate: true }): Promise<PaginatedApiResponse<Person>>;
+  async getPeople(treeId: string, params?: GetPeopleParams): Promise<Person[] | PaginatedApiResponse<Person>> {
+    const response = await api.get<{ data: Person[] } | PaginatedApiResponse<Person>>(`/trees/${treeId}/people`, {
+      params,
+    });
+
+    if (params?.paginate) {
+      return response as PaginatedApiResponse<Person>;
+    }
+
+    return (response as { data: Person[] }).data;
   }
 
   async getPerson(treeId: string, personId: string): Promise<Person> {
@@ -220,10 +248,52 @@ class FamilyTreeService {
   /**
    * Copy a person to another family tree
    */
-  async copyPerson(treeId: string, personId: string, targetTreeId: string): Promise<Person> {
-    const response = await api.post<{ data: Person }>(`/trees/${treeId}/people/${personId}/copy`, {
+  async copyPerson(
+    treeId: string,
+    personId: string,
+    targetTreeId: string | undefined,
+    options?: CopyPersonRequest
+  ): Promise<CopyPersonResponse> {
+    const response = await api.post<CopyPersonResponse>(`/trees/${treeId}/people/${personId}/copy`, {
       target_tree_id: targetTreeId,
+      include_descendants: options?.include_descendants ?? true,
+      target_parent_id: options?.target_parent_id,
+      target_parent_role: options?.target_parent_role,
+      copy_mode: options?.copy_mode,
+      create_target_tree: options?.create_target_tree,
+      target_tree_name: options?.target_tree_name,
+      target_tree_description: options?.target_tree_description,
     });
+
+    return response;
+  }
+
+  async searchPeople(query: string, options?: SearchPeopleOptions): Promise<Person[]> {
+    try {
+      const response = await api.get<{ data: Person[] }>('/people/search', {
+        params: {
+          q: query,
+          ...(options?.treeId ? { tree_id: options.treeId } : {}),
+          ...(options?.mergeableOnly ? { mergeable_only: 1 } : {}),
+        },
+      });
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403) {
+        return [];
+      }
+
+      throw error;
+    }
+  }
+
+  async mergePeople(payload: MergePeoplePayload): Promise<MergePeopleResult> {
+    const response = await api.post<{ data: MergePeopleResult }>('/people/merge', payload);
+    return response.data;
+  }
+
+  async previewMergePeople(payload: MergePeoplePreviewPayload): Promise<MergePeoplePreview> {
+    const response = await api.post<{ data: MergePeoplePreview }>('/people/merge/preview', payload);
     return response.data;
   }
 

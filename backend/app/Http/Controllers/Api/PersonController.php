@@ -6,24 +6,121 @@ use App\Http\Controllers\Controller;
 use App\Models\FamilyTree;
 use App\Models\Person;
 use App\Models\Relationship;
+use App\Services\PersonAuthorizationService;
+use App\Services\PersonMergeService;
+use App\Services\PersonTreeContextService;
+use App\Services\SubtreeCopyService;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class PersonController extends Controller
 {
-    public function index(Request $request, FamilyTree $familyTree)
+    public function index(Request $request, FamilyTree $familyTree, PersonTreeContextService $personTreeContextService)
     {
         $this->authorize('view', $familyTree);
 
-        $people = $familyTree->people()
-            ->with(['father', 'mother'])
-            ->get();
+        if ($request->has('paginate')) {
+            $rawPaginate = $request->query('paginate');
+
+            if (is_string($rawPaginate)) {
+                $rawPaginate = trim($rawPaginate);
+            }
+
+            $normalizedPaginate = filter_var($rawPaginate, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+            if ($normalizedPaginate !== null) {
+                $request->merge(['paginate' => $normalizedPaginate]);
+            }
+        }
+
+        $validated = $request->validate([
+            'page' => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100',
+            'search' => 'nullable|string',
+            'q' => 'nullable|string',
+            'sort' => 'sometimes|in:name_asc,created_desc',
+            'paginate' => 'sometimes|boolean',
+        ]);
+
+        $paginate = (bool) ($validated['paginate'] ?? false);
+        $perPage = $validated['per_page'] ?? 25;
+        $search = isset($validated['search']) ? trim($validated['search']) : null;
+        $q = isset($validated['q']) ? trim($validated['q']) : null;
+        $search ??= $q;
+        $sort = $validated['sort'] ?? 'name_asc';
+
+        $peopleQuery = Person::query()
+            ->accessibleBy($request->user())
+            ->where(function (Builder $query) use ($familyTree) {
+                $query->whereHas('treeMemberships', function (Builder $membershipQuery) use ($familyTree) {
+                    $membershipQuery->where('tree_id', $familyTree->id);
+                })->orWhere(function (Builder $legacyQuery) use ($familyTree) {
+                    $legacyQuery->where('family_tree_id', $familyTree->id)
+                        ->whereDoesntHave('treeMemberships', function (Builder $membershipQuery) use ($familyTree) {
+                            $membershipQuery->where('tree_id', $familyTree->id);
+                        });
+                });
+            })
+            ->with(['father', 'mother']);
+
+        if ($search !== null && $search !== '') {
+            $this->applyNameSearchFilter($peopleQuery, $search);
+        }
+
+        if ($sort === 'created_desc') {
+            $peopleQuery->orderByDesc('created_at');
+        } else {
+            $peopleQuery->orderBy('first_name')->orderBy('last_name');
+        }
+
+        if ($paginate) {
+            $paginatedPeople = $peopleQuery->paginate($perPage);
+
+            $personTreeContextService->applyTreeParentContext(
+                collect($paginatedPeople->items()),
+                $familyTree,
+                $request->user()
+            );
+
+            return response()->json([
+                'data' => $paginatedPeople->items(),
+                'links' => [
+                    'first' => $paginatedPeople->url(1),
+                    'last' => $paginatedPeople->url($paginatedPeople->lastPage()),
+                    'prev' => $paginatedPeople->previousPageUrl(),
+                    'next' => $paginatedPeople->nextPageUrl(),
+                ],
+                'meta' => [
+                    'current_page' => $paginatedPeople->currentPage(),
+                    'from' => $paginatedPeople->firstItem(),
+                    'last_page' => $paginatedPeople->lastPage(),
+                    'links' => $paginatedPeople->linkCollection()->toArray(),
+                    'path' => $paginatedPeople->path(),
+                    'per_page' => $paginatedPeople->perPage(),
+                    'to' => $paginatedPeople->lastItem(),
+                    'total' => $paginatedPeople->total(),
+                ],
+            ]);
+        }
+
+        $people = $peopleQuery->get();
+
+        $personTreeContextService->applyTreeParentContext($people, $familyTree, $request->user());
 
         return response()->json([
             'data' => $people,
         ]);
     }
 
-    public function store(Request $request, FamilyTree $familyTree)
+    public function store(
+        Request $request,
+        FamilyTree $familyTree,
+        SubtreeCopyService $subtreeCopyService,
+        PersonTreeContextService $personTreeContextService
+    )
     {
         $this->authorize('update', $familyTree);
 
@@ -43,8 +140,16 @@ class PersonController extends Controller
             'is_deceased' => 'nullable|boolean',
         ]);
 
+        $personTreeContextService->ensureParentsBelongToTreeContext(
+            $validated,
+            $familyTree,
+            $subtreeCopyService,
+            $request->user()
+        );
+
         $validated = $this->processPersonData($validated);
 
+        $validated['owner_user_id'] = $request->user()->id;
         $person = $familyTree->people()->create($validated);
 
         return response()->json([
@@ -53,34 +158,52 @@ class PersonController extends Controller
         ], 201);
     }
 
-    public function show(Request $request, FamilyTree $familyTree, Person $person)
+    public function show(Request $request, FamilyTree $familyTree, Person $person, PersonTreeContextService $personTreeContextService)
     {
         $this->authorize('view', $familyTree);
 
-        if ($person->family_tree_id !== $familyTree->id) {
+        $belongsToTree = $personTreeContextService->personBelongsToFamilyTreeContext($person, $familyTree);
+
+        if (!$belongsToTree) {
             abort(404);
         }
+
+        $this->authorize('view', $person);
 
         $person->load([
             'father',
             'mother',
-            'children',
-            'spouseRelationships.person1',
-            'spouseRelationships.person2',
+            'relationshipsAsPerson1.person2',
+            'relationshipsAsPerson2.person1',
         ]);
+
+        $personTreeContextService->applyTreeParentContext(collect([$person]), $familyTree, $request->user());
+
+        $treeChildren = $personTreeContextService->resolveTreeChildren($familyTree, $person, $request->user());
+        $person->setRelation('children', $treeChildren);
 
         return response()->json([
             'data' => $person,
         ]);
     }
 
-    public function update(Request $request, FamilyTree $familyTree, Person $person)
+    public function update(
+        Request $request,
+        FamilyTree $familyTree,
+        Person $person,
+        SubtreeCopyService $subtreeCopyService,
+        PersonTreeContextService $personTreeContextService
+    )
     {
         $this->authorize('update', $familyTree);
 
-        if ($person->family_tree_id !== $familyTree->id) {
+        $belongsToRouteTree = $personTreeContextService->personBelongsToFamilyTreeContext($person, $familyTree);
+
+        if (!$belongsToRouteTree) {
             abort(404);
         }
+
+        $this->authorize('update', $person);
 
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
@@ -97,6 +220,13 @@ class PersonController extends Controller
             'notes' => 'nullable|string',
             'is_deceased' => 'nullable|boolean',
         ]);
+
+        $personTreeContextService->ensureParentsBelongToTreeContext(
+            $validated,
+            $familyTree,
+            $subtreeCopyService,
+            $request->user()
+        );
 
         $validated = $this->processPersonData($validated);
 
@@ -108,13 +238,17 @@ class PersonController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, FamilyTree $familyTree, Person $person)
+    public function destroy(Request $request, FamilyTree $familyTree, Person $person, PersonTreeContextService $personTreeContextService)
     {
-        $this->authorize('delete', $familyTree);
+        $this->authorize('update', $familyTree);
 
-        if ($person->family_tree_id !== $familyTree->id) {
+        $belongsToRouteTree = $personTreeContextService->personBelongsToFamilyTreeContext($person, $familyTree);
+
+        if (!$belongsToRouteTree) {
             abort(404);
         }
+
+        $this->authorize('delete', $person);
 
         try {
             $person->delete();
@@ -122,18 +256,35 @@ class PersonController extends Controller
                 'message' => 'Person deleted successfully',
             ]);
         } catch (\Exception $e) {
+            Log::error('Failed to delete person.', [
+                'person_id' => $person->id,
+                'family_tree_id' => $familyTree->id,
+                'user_id' => $request->user()?->id,
+                'exception' => $e,
+            ]);
+
             return response()->json([
-                'message' => $e->getMessage(),
-            ], 422);
+                'message' => 'Failed to delete person.',
+            ], 500);
         }
     }
 
     /**
      * Unified method to create a new person and establish a relationship
      */
-    public function manageRelationship(Request $request, FamilyTree $familyTree, Person $person)
+    public function manageRelationship(
+        Request $request,
+        FamilyTree $familyTree,
+        Person $person,
+        PersonTreeContextService $personTreeContextService
+    )
     {
+        if (!$personTreeContextService->personBelongsToFamilyTreeContext($person, $familyTree)) {
+            abort(404);
+        }
+
         $this->authorize('update', $familyTree);
+        $this->authorize('update', $person);
 
         $request->validate([
             'relationship_type' => 'required|in:parent,child,spouse',
@@ -158,9 +309,19 @@ class PersonController extends Controller
     /**
      * Unified method to link existing people in a relationship
      */
-    public function linkRelationship(Request $request, FamilyTree $familyTree, Person $person)
+    public function linkRelationship(
+        Request $request,
+        FamilyTree $familyTree,
+        Person $person,
+        PersonTreeContextService $personTreeContextService
+    )
     {
+        if (!$personTreeContextService->personBelongsToFamilyTreeContext($person, $familyTree)) {
+            abort(404);
+        }
+
         $this->authorize('update', $familyTree);
+        $this->authorize('update', $person);
 
         $validated = $request->validate([
             'relationship_type' => 'required|in:parent,child,spouse',
@@ -171,14 +332,25 @@ class PersonController extends Controller
         $relationshipType = $validated['relationship_type'];
         $relationshipRole = $validated['relationship_role'] ?? $request->parent_role ?? null;
         $relatedPersonId = $validated['related_person_id'];
+        $relatedPerson = Person::findOrFail($relatedPersonId);
+
+        $this->authorize('view', $relatedPerson);
+
+        if (!$personTreeContextService->personBelongsToFamilyTreeContext($relatedPerson, $familyTree)) {
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'message' => 'Related person must belong to the same family tree context',
+            ], 422);
+        }
 
         switch ($relationshipType) {
             case 'parent':
-                return $this->handleParentLink($request, $familyTree, $person, $relatedPersonId, $relationshipRole);
+                return $this->handleParentLink($request, $familyTree, $person, $relatedPerson->id, $relationshipRole, $personTreeContextService);
             case 'child':
-                return $this->handleChildLink($request, $familyTree, $person, $relatedPersonId, $relationshipRole);
+                return $this->handleChildLink($request, $familyTree, $person, $relatedPerson->id, $relationshipRole, $personTreeContextService);
             case 'spouse':
-                return $this->handleSpouseLink($request, $familyTree, $person, $relatedPersonId, $relationshipRole);
+                return $this->handleSpouseLink($request, $familyTree, $person, $relatedPerson->id, $relationshipRole, $personTreeContextService);
             default:
                 return response()->json(['message' => 'Invalid relationship type'], 422);
         }
@@ -187,9 +359,20 @@ class PersonController extends Controller
     /**
      * Remove a relationship between two people
      */
-    public function removeRelationship(Request $request, FamilyTree $familyTree, Person $person, $relationshipId)
+    public function removeRelationship(
+        Request $request,
+        FamilyTree $familyTree,
+        Person $person,
+        $relationshipId,
+        PersonTreeContextService $personTreeContextService
+    )
     {
+        if (!$personTreeContextService->personBelongsToFamilyTreeContext($person, $familyTree)) {
+            abort(404);
+        }
+
         $this->authorize('update', $familyTree);
+        $this->authorize('update', $person);
 
         // Check if relationshipId is a parent type (father/mother)
         if (in_array($relationshipId, ['father', 'mother'])) {
@@ -224,12 +407,31 @@ class PersonController extends Controller
     /**
      * Update metadata for a relationship
      */
-    public function updateRelationship(Request $request, FamilyTree $familyTree, Person $person, Relationship $relationship)
+    public function updateRelationship(
+        Request $request,
+        FamilyTree $familyTree,
+        Person $person,
+        Relationship $relationship,
+        PersonTreeContextService $personTreeContextService
+    )
     {
+        if (!$personTreeContextService->personBelongsToFamilyTreeContext($person, $familyTree)) {
+            abort(404);
+        }
+
         $this->authorize('update', $familyTree);
+        $this->authorize('update', $person);
 
         if ($relationship->family_tree_id !== $familyTree->id) {
             abort(403);
+        }
+
+        if ($relationship->person1) {
+            $this->authorize('update', $relationship->person1);
+        }
+
+        if ($relationship->person2) {
+            $this->authorize('update', $relationship->person2);
         }
 
         $validated = $request->validate([
@@ -251,47 +453,243 @@ class PersonController extends Controller
     /**
      * Copy a person's information to another family tree
      */
-    public function copyToTree(Request $request, FamilyTree $familyTree, Person $person)
+    public function copyToTree(Request $request, FamilyTree $familyTree, Person $person, SubtreeCopyService $subtreeCopyService)
     {
         $this->authorize('view', $familyTree);
 
-        $validated = $request->validate([
-            'target_tree_id' => 'required|uuid|exists:family_trees,id',
-        ]);
-
-        $targetTree = FamilyTree::findOrFail($validated['target_tree_id']);
-        $this->authorize('update', $targetTree);
-
-        // Check if person already exists in the target tree (optional simple check)
-        $exists = Person::where('family_tree_id', $targetTree->id)
-            ->where('first_name', $person->first_name)
-            ->where('last_name', $person->last_name)
-            ->where('birth_date', $person->birth_date)
-            ->exists();
-
-        if ($exists) {
-            return response()->json([
-                'message' => 'A person with this name and birth date already exists in the target tree',
-            ], 422);
+        if (!$subtreeCopyService->personBelongsToTree($person, $familyTree)) {
+            abort(404);
         }
 
-        // Duplicate the person
-        $newPerson = $person->replicate([
-            'father_id',
-            'mother_id',
-            'family_tree_id',
-            'created_at',
-            'updated_at',
-            'deleted_at'
+        $this->authorize('view', $person);
+
+        $validated = $request->validate([
+            'create_target_tree' => 'nullable|boolean',
+            'target_tree_id' => 'required_unless:create_target_tree,true|uuid|exists:family_trees,id',
+            'target_tree_name' => 'required_if:create_target_tree,true|string|max:255',
+            'target_tree_description' => 'nullable|string|max:1000',
+            'target_parent_id' => 'nullable|uuid|exists:people,id',
+            'include_descendants' => 'nullable|boolean',
+            'target_parent_role' => 'nullable|in:father,mother',
+            'copy_mode' => 'nullable|in:clone,reuse',
         ]);
-        
-        $newPerson->family_tree_id = $targetTree->id;
-        $newPerson->save();
+
+        $createdTreeId = null;
+        $createdTreeName = null;
+        $createTargetTree = (bool) ($validated['create_target_tree'] ?? false);
+
+        if ($createTargetTree) {
+            $this->authorize('create', FamilyTree::class);
+
+            $targetTree = FamilyTree::create([
+                'user_id' => $request->user()->id,
+                'name' => $validated['target_tree_name'],
+                'description' => $validated['target_tree_description'] ?? null,
+            ]);
+
+            $createdTreeId = $targetTree->id;
+            $createdTreeName = $targetTree->name;
+        } else {
+            $targetTree = FamilyTree::findOrFail($validated['target_tree_id']);
+        }
+
+        $this->authorize('update', $targetTree);
+
+        $targetParent = null;
+        if (!empty($validated['target_parent_id'])) {
+            $targetParent = Person::findOrFail($validated['target_parent_id']);
+
+            $this->authorize('update', $targetParent);
+
+            if (!$subtreeCopyService->personBelongsToTree($targetParent, $targetTree)) {
+                return response()->json([
+                    'message' => 'Target parent must belong to the target tree',
+                ], 422);
+            }
+        }
+
+        $result = $subtreeCopyService->copy(
+            sourceTree: $familyTree,
+            targetTree: $targetTree,
+            sourceRoot: $person,
+            targetParent: $targetParent,
+            includeDescendants: (bool) ($validated['include_descendants'] ?? true),
+            targetParentRole: $validated['target_parent_role'] ?? null,
+            copyMode: $validated['copy_mode'] ?? 'clone'
+        );
 
         return response()->json([
-            'data' => $newPerson,
-            'message' => 'Person copied successfully to ' . $targetTree->name,
+            'data' => $result['root'],
+            'meta' => [
+                'copied_person_ids' => $result['copied_person_ids'],
+                'skipped_person_ids' => $result['skipped_person_ids'],
+                'copied_count' => count($result['copied_person_ids']),
+                'created_tree_id' => $createdTreeId,
+                'created_tree_name' => $createdTreeName,
+            ],
+            'message' => 'Subtree copied successfully to ' . $targetTree->name,
         ], 201);
+    }
+
+    public function search(Request $request)
+    {
+        $validated = $request->validate([
+            'q' => 'nullable|string|max:255',
+            'mergeable_only' => 'sometimes|boolean',
+            'tree_id' => 'sometimes|uuid|exists:family_trees,id',
+        ]);
+
+        $query = trim((string) ($validated['q'] ?? ''));
+        $mergeableOnly = (bool) ($validated['mergeable_only'] ?? false);
+        $treeId = $validated['tree_id'] ?? null;
+
+        if (mb_strlen($query) < 2) {
+            return response()->json([
+                'data' => [],
+            ]);
+        }
+
+        if ($treeId !== null) {
+            $tree = FamilyTree::findOrFail($treeId);
+            $this->authorize('view', $tree);
+        }
+
+        $people = Person::query()
+            ->accessibleBy($request->user())
+            ->when($mergeableOnly, function ($builder) use ($request) {
+                $builder->where('people.owner_user_id', $request->user()->id);
+            })
+            ->when($treeId !== null, function (Builder $builder) use ($treeId) {
+                $builder->where(function (Builder $treeQuery) use ($treeId) {
+                    $treeQuery->whereHas('treeMemberships', function (Builder $membershipQuery) use ($treeId) {
+                        $membershipQuery->where('tree_id', $treeId);
+                    })->orWhere(function (Builder $legacyQuery) use ($treeId) {
+                        $legacyQuery->where('people.family_tree_id', $treeId)
+                            ->whereDoesntHave('treeMemberships', function (Builder $membershipQuery) use ($treeId) {
+                                $membershipQuery->where('tree_id', $treeId);
+                            });
+                    });
+                });
+            })
+            ->when($query !== '', function (Builder $builder) use ($query) {
+                $this->applyNameSearchFilter($builder, $query);
+            })
+            ->select('people.*')
+            ->distinct()
+            ->with('familyTree:id,name')
+            ->orderBy('people.first_name')
+            ->orderBy('people.last_name')
+            ->limit(30)
+            ->get();
+
+        return response()->json([
+            'data' => $people,
+        ]);
+    }
+
+    public function merge(
+        Request $request,
+        PersonMergeService $personMergeService,
+        PersonAuthorizationService $personAuthorizationService
+    )
+    {
+        $validated = $request->validate([
+            'keep_person_id' => 'required|uuid|exists:people,id',
+            'merge_person_ids' => 'required|array|min:1',
+            'merge_person_ids.*' => 'required|uuid|exists:people,id|different:keep_person_id',
+        ]);
+
+        $allowedTreeIds = $personAuthorizationService->resolveAllowedTreeIdsForMerge(
+            $request,
+            $validated['keep_person_id'],
+            $validated['merge_person_ids']
+        );
+        if ($allowedTreeIds instanceof JsonResponse) {
+            return $allowedTreeIds;
+        }
+
+        $policyError = $personAuthorizationService->ensureUserCanUpdateMergedPeople(
+            $request,
+            $validated['keep_person_id'],
+            $validated['merge_person_ids']
+        );
+        if ($policyError instanceof JsonResponse) {
+            return $policyError;
+        }
+
+        try {
+            $result = $personMergeService->merge(
+                $validated['keep_person_id'],
+                $validated['merge_person_ids'],
+                $allowedTreeIds
+            );
+        } catch (AuthorizationException) {
+            return response()->json([
+                'message' => 'You can only merge people from trees you own.',
+            ], 403);
+        }
+
+        return response()->json([
+            'data' => $result,
+            'message' => 'People merged successfully',
+        ]);
+    }
+
+    public function mergePreview(
+        Request $request,
+        PersonMergeService $personMergeService,
+        PersonAuthorizationService $personAuthorizationService
+    )
+    {
+        $validated = $request->validate([
+            'keep_person_id' => 'required|uuid|exists:people,id',
+            'merge_person_ids' => 'required|array|min:1',
+            'merge_person_ids.*' => 'required|uuid|exists:people,id|different:keep_person_id',
+            'tree_id' => 'sometimes|uuid|exists:family_trees,id',
+        ]);
+
+        $allowedTreeIds = $personAuthorizationService->resolveAllowedTreeIdsForMerge(
+            $request,
+            $validated['keep_person_id'],
+            $validated['merge_person_ids']
+        );
+        if ($allowedTreeIds instanceof JsonResponse) {
+            return $allowedTreeIds;
+        }
+
+        $policyError = $personAuthorizationService->ensureUserCanUpdateMergedPeople(
+            $request,
+            $validated['keep_person_id'],
+            $validated['merge_person_ids']
+        );
+        if ($policyError instanceof JsonResponse) {
+            return $policyError;
+        }
+
+        $previewTreeIds = $allowedTreeIds;
+
+        if (!empty($validated['tree_id'])) {
+            $tree = FamilyTree::findOrFail($validated['tree_id']);
+            $this->authorize('view', $tree);
+
+            if (!in_array($tree->id, $allowedTreeIds, true)) {
+                return response()->json([
+                    'message' => 'You can only merge people from trees you own.',
+                ], 403);
+            }
+
+            $previewTreeIds = [$tree->id];
+        }
+
+        $preview = $personMergeService->preview(
+            $validated['keep_person_id'],
+            $validated['merge_person_ids'],
+            $previewTreeIds
+        );
+
+        return response()->json([
+            'data' => $preview,
+        ]);
     }
 
     /**
@@ -308,6 +706,28 @@ class PersonController extends Controller
         }
 
         return $personData;
+    }
+
+    private function applyNameSearchFilter(Builder $builder, string $query): void
+    {
+        $normalizedQuery = $this->normalizeSearchTerm($query);
+
+        $builder->where(function (Builder $q) use ($normalizedQuery) {
+            $q->whereRaw('LOWER(TRIM(people.first_name)) LIKE ?', ["%{$normalizedQuery}%"])
+                ->orWhereRaw('LOWER(TRIM(people.last_name)) LIKE ?', ["%{$normalizedQuery}%"])
+                ->orWhereRaw('LOWER(TRIM(people.maiden_name)) LIKE ?', ["%{$normalizedQuery}%"])
+                ->orWhereRaw('LOWER(TRIM(people.nickname)) LIKE ?', ["%{$normalizedQuery}%"])
+                ->orWhereRaw("LOWER(REPLACE(CONCAT(COALESCE(people.first_name, ''), COALESCE(people.last_name, '')), ' ', '')) LIKE ?", [
+                    '%' . str_replace(' ', '', $normalizedQuery) . '%',
+                ]);
+        });
+    }
+
+    private function normalizeSearchTerm(string $query): string
+    {
+        $normalized = mb_strtolower(trim($query), 'UTF-8');
+
+        return preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
     }
 
     /**
@@ -337,6 +757,7 @@ class PersonController extends Controller
 
         $parentData = $this->processPersonData($validated);
         $parentData['family_tree_id'] = $familyTree->id;
+        $parentData['owner_user_id'] = $request->user()->id;
 
         $parent = Person::create($parentData);
 
@@ -371,6 +792,7 @@ class PersonController extends Controller
 
         $childData = $this->processPersonData($validated);
         $childData['family_tree_id'] = $familyTree->id;
+        $childData['owner_user_id'] = $request->user()->id;
 
         // Determine the role of the current person ($person) as a parent of the new child
         $parentRole = $relationshipRole ?: $request->parent_role;
@@ -436,6 +858,7 @@ class PersonController extends Controller
 
         $spouseData = $this->processPersonData($spouseData);
         $spouseData['family_tree_id'] = $familyTree->id;
+        $spouseData['owner_user_id'] = $request->user()->id;
 
         // Create the spouse
         $spouse = $familyTree->people()->create($spouseData);
@@ -460,12 +883,21 @@ class PersonController extends Controller
     /**
      * Handle linking existing person as parent
      */
-    private function handleParentLink(Request $request, FamilyTree $familyTree, Person $person, string $parentId, ?string $relationshipRole)
+    private function handleParentLink(
+        Request $request,
+        FamilyTree $familyTree,
+        Person $person,
+        string $parentId,
+        ?string $relationshipRole,
+        PersonTreeContextService $personTreeContextService
+    )
     {
         $parent = Person::findOrFail($parentId);
 
-        // Ensure parent belongs to same family tree
-        if ($parent->family_tree_id !== $familyTree->id) {
+        $this->authorize('update', $parent);
+
+        // Ensure parent belongs to same family tree context
+        if (!$personTreeContextService->personBelongsToFamilyTreeContext($parent, $familyTree)) {
             return response()->json([
                 'message' => 'Parent must belong to the same family tree',
             ], 422);
@@ -498,12 +930,21 @@ class PersonController extends Controller
     /**
      * Handle linking existing person as child
      */
-    private function handleChildLink(Request $request, FamilyTree $familyTree, Person $person, string $childId, ?string $relationshipRole)
+    private function handleChildLink(
+        Request $request,
+        FamilyTree $familyTree,
+        Person $person,
+        string $childId,
+        ?string $relationshipRole,
+        PersonTreeContextService $personTreeContextService
+    )
     {
         $child = Person::findOrFail($childId);
 
-        // Ensure child belongs to same family tree
-        if ($child->family_tree_id !== $familyTree->id) {
+        $this->authorize('update', $child);
+
+        // Ensure child belongs to same family tree context
+        if (!$personTreeContextService->personBelongsToFamilyTreeContext($child, $familyTree)) {
             return response()->json([
                 'message' => 'Child must belong to the same family tree',
             ], 422);
@@ -546,7 +987,14 @@ class PersonController extends Controller
     /**
      * Handle linking existing person as spouse
      */
-    private function handleSpouseLink(Request $request, FamilyTree $familyTree, Person $person, string $spouseId, ?string $relationshipRole)
+    private function handleSpouseLink(
+        Request $request,
+        FamilyTree $familyTree,
+        Person $person,
+        string $spouseId,
+        ?string $relationshipRole,
+        PersonTreeContextService $personTreeContextService
+    )
     {
         $validated = $request->validate([
             'start_date' => 'nullable|date',
@@ -557,8 +1005,10 @@ class PersonController extends Controller
 
         $spouse = Person::findOrFail($spouseId);
 
-        // Ensure spouse belongs to same family tree
-        if ($spouse->family_tree_id !== $familyTree->id) {
+        $this->authorize('view', $spouse);
+
+        // Ensure spouse belongs to same family tree context
+        if (!$personTreeContextService->personBelongsToFamilyTreeContext($spouse, $familyTree)) {
             return response()->json([
                 'message' => 'Spouse must belong to the same family tree',
             ], 422);

@@ -83,7 +83,7 @@ export interface TreeSettings {
   };
   collapsed_generations: number[];
   print: {
-    paper_size: 'A4' | 'A3' | 'A2' | 'A1';
+    paper_size: 'A4' | 'A3' | 'A2' | 'A1' | 'A0';
     orientation: 'portrait' | 'landscape';
     include_legend: boolean;
   };
@@ -92,7 +92,8 @@ export interface TreeSettings {
 // Person types
 export interface Person {
   id: string;
-  family_tree_id: string;
+  family_tree_id: string | null;
+  owner_user_id?: number | null;
   first_name: string;
   last_name: string | null;
   maiden_name: string | null;
@@ -185,12 +186,98 @@ export interface ApiResponse<T> {
   errors?: Record<string, string[]>;
 }
 
+export interface CopyPersonResponse {
+  data: Person;
+  meta: {
+    copied_person_ids: string[];
+    skipped_person_ids: string[];
+    copied_count: number;
+    created_tree_id?: string;
+    created_tree_name?: string;
+  };
+  message?: string;
+}
+
+export interface CopyPersonRequest {
+  include_descendants?: boolean;
+  target_parent_id?: string;
+  target_parent_role?: 'father' | 'mother';
+  copy_mode?: 'clone' | 'reuse';
+  create_target_tree?: boolean;
+  target_tree_name?: string;
+  target_tree_description?: string;
+}
+
+export interface MergePeoplePayload {
+  keep_person_id: string;
+  merge_person_ids: string[];
+}
+
+export interface MergePeoplePreviewPayload extends MergePeoplePayload {
+  tree_id?: string;
+}
+
+export interface SearchPeopleOptions {
+  treeId?: string;
+  mergeableOnly?: boolean;
+}
+
+export interface MergePeopleResult {
+  kept_person_id: string;
+  merged_person_ids: string[];
+}
+
+export interface MergePeoplePreview {
+  merge_people_count: number;
+  legacy_parent_links_count: number;
+  legacy_relationship_rows_count: number;
+  tree_memberships_count: number;
+  tree_edges_count: number;
+  tree_root_refs_count: number;
+  impacted_tree_ids?: string[];
+  impacted_tree_count?: number;
+  impacted_relationship_tree_count?: number;
+  impacted_legacy_tree_count?: number;
+  impacted_membership_tree_count?: number;
+  impacted_edge_tree_count?: number;
+  impacted_root_tree_count?: number;
+  has_cross_tree_impact?: boolean;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   current_page: number;
   last_page: number;
   per_page: number;
   total: number;
+}
+
+export interface PaginationLink {
+  url: string | null;
+  label: string;
+  active: boolean;
+}
+
+export interface PaginationMeta {
+  current_page: number;
+  from: number | null;
+  last_page: number;
+  links: PaginationLink[];
+  path: string;
+  per_page: number;
+  to: number | null;
+  total: number;
+}
+
+export interface PaginatedApiResponse<T> {
+  data: T[];
+  links: {
+    first: string | null;
+    last: string | null;
+    prev: string | null;
+    next: string | null;
+  };
+  meta: PaginationMeta;
 }
 
 // Admin types
