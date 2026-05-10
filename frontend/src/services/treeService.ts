@@ -1,5 +1,5 @@
 import { familyTreeService, type CreateFamilyTreeData, type CreatePersonData, type CreateRelationshipData, type UpdateRelationshipData, type LinkRelationshipData, type GetPeopleParams } from './familyTreeService';
-import type { CopyPersonRequest, MergePeoplePayload, MergePeoplePreviewPayload, SearchPeopleOptions } from '@/types';
+import type { CopyPersonRequest, MergePeoplePayload, MergePeoplePreviewPayload, PaginatedApiResponse, Person, SearchPeopleOptions } from '@/types';
 
 // Export familyTreeService as treeService for cleaner imports
 export const treeService = {
@@ -9,7 +9,10 @@ export const treeService = {
   updateTree: (id: string, data: Partial<CreateFamilyTreeData>) => familyTreeService.updateFamilyTree(id, data),
   deleteTree: (id: string) => familyTreeService.deleteFamilyTree(id),
 
-  getPeople: (treeId: string, params?: GetPeopleParams) => familyTreeService.getPeople(treeId, params),
+  getPeople: <TPaginated extends boolean = false>(
+    treeId: string,
+    params?: GetPeopleParams & { paginate?: TPaginated }
+  ) => familyTreeService.getPeople<TPaginated>(treeId, params) as Promise<TPaginated extends true ? PaginatedApiResponse<Person> : Person[]>,
   getPerson: (treeId: string, personId: string) => familyTreeService.getPerson(treeId, personId),
   createPerson: (treeId: string, data: CreatePersonData) => familyTreeService.createPerson(treeId, data),
   updatePerson: (treeId: string, personId: string, data: Partial<CreatePersonData>) => familyTreeService.updatePerson(treeId, personId, data),

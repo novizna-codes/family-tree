@@ -152,6 +152,7 @@ export interface GetPeopleParams {
   per_page?: number;
   search?: string;
   sort?: 'name_asc' | 'created_desc';
+  [key: string]: string | number | boolean | null | undefined;
 }
 
 class FamilyTreeService {
@@ -179,18 +180,19 @@ class FamilyTreeService {
     await api.delete(`/trees/${id}`);
   }
 
-  async getPeople(treeId: string): Promise<Person[]>;
-  async getPeople(treeId: string, params: GetPeopleParams & { paginate: true }): Promise<PaginatedApiResponse<Person>>;
-  async getPeople(treeId: string, params?: GetPeopleParams): Promise<Person[] | PaginatedApiResponse<Person>> {
+  async getPeople<TPaginated extends boolean = false>(
+    treeId: string,
+    params?: GetPeopleParams & { paginate?: TPaginated }
+  ): Promise<TPaginated extends true ? PaginatedApiResponse<Person> : Person[]> {
     const response = await api.get<{ data: Person[] } | PaginatedApiResponse<Person>>(`/trees/${treeId}/people`, {
       params,
     });
 
     if (params?.paginate) {
-      return response as PaginatedApiResponse<Person>;
+      return response as TPaginated extends true ? PaginatedApiResponse<Person> : Person[];
     }
 
-    return (response as { data: Person[] }).data;
+    return (response as { data: Person[] }).data as TPaginated extends true ? PaginatedApiResponse<Person> : Person[];
   }
 
   async getPerson(treeId: string, personId: string): Promise<Person> {
