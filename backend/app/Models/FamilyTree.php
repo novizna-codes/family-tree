@@ -55,6 +55,11 @@ class FamilyTree extends Model
         return $this->hasMany(TreeEdge::class, 'tree_id');
     }
 
+    public function exportArtifacts()
+    {
+        return $this->hasMany(TreeExportArtifact::class, 'tree_id');
+    }
+
     public function getDefaultSettings(): array
     {
         return [
@@ -77,6 +82,13 @@ class FamilyTree extends Model
                 'paper_size' => 'A4',
                 'orientation' => 'landscape',
                 'include_legend' => true,
+                'export_mode' => 'vector_pdf',
+                'bleed_mm' => 3,
+                'safe_margin_mm' => 10,
+                'crop_marks' => false,
+                'tiled' => false,
+                'tile_overlap_mm' => 5,
+                'scale' => 2,
             ],
         ];
     }

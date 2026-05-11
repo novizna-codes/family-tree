@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FamilyTreeController;
 use App\Http\Controllers\Api\PersonController;
 use App\Http\Controllers\Api\PermissionController;
+use App\Http\Controllers\Api\TreeExportArtifactController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\SettingsController as AdminSettingsController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
@@ -50,8 +51,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/trees/{familyTree}', [FamilyTreeController::class, 'destroy']);
     Route::get('/trees/{familyTree}/visualization', [FamilyTreeController::class, 'visualization']);
     Route::get('/trees/{familyTree}/export', [FamilyTreeController::class, 'export']);
+    Route::get('/trees/{familyTree}/export-artifacts', [TreeExportArtifactController::class, 'index']);
+    Route::post('/trees/{familyTree}/export-artifacts', [TreeExportArtifactController::class, 'store']);
+    Route::get('/trees/{familyTree}/export-artifacts/{artifact}/download', [TreeExportArtifactController::class, 'download']);
+    Route::delete('/trees/{familyTree}/export-artifacts/{artifact}', [TreeExportArtifactController::class, 'destroy']);
 
     // People routes
+    Route::get('/people', [PersonController::class, 'globalIndex']);
     Route::get('/people/search', [PersonController::class, 'search']);
     Route::post('/people/merge/preview', [PersonController::class, 'mergePreview']);
     Route::post('/people/merge', [PersonController::class, 'merge']);

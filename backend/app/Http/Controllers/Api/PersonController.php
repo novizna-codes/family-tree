@@ -18,6 +18,81 @@ use Illuminate\Support\Facades\Log;
 
 class PersonController extends Controller
 {
+    public function globalIndex(Request $request)
+    {
+        if ($request->has('paginate')) {
+            $rawPaginate = $request->query('paginate');
+
+            if (is_string($rawPaginate)) {
+                $rawPaginate = trim($rawPaginate);
+            }
+
+            $normalizedPaginate = filter_var($rawPaginate, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+            if ($normalizedPaginate !== null) {
+                $request->merge(['paginate' => $normalizedPaginate]);
+            }
+        }
+
+        $validated = $request->validate([
+            'page' => 'sometimes|integer|min:1',
+            'per_page' => 'sometimes|integer|min:1|max:100',
+            'search' => 'nullable|string',
+            'q' => 'nullable|string',
+            'sort' => 'sometimes|in:name_asc,created_desc',
+            'paginate' => 'sometimes|boolean',
+        ]);
+
+        $paginate = (bool) ($validated['paginate'] ?? false);
+        $perPage = $validated['per_page'] ?? 25;
+        $search = isset($validated['search']) ? trim($validated['search']) : null;
+        $q = isset($validated['q']) ? trim($validated['q']) : null;
+        $search ??= $q;
+        $sort = $validated['sort'] ?? 'name_asc';
+
+        $peopleQuery = Person::query()
+            ->accessibleBy($request->user())
+            ->with(['father', 'mother']);
+
+        if ($search !== null && $search !== '') {
+            $this->applyNameSearchFilter($peopleQuery, $search);
+        }
+
+        if ($sort === 'created_desc') {
+            $peopleQuery->orderByDesc('created_at');
+        } else {
+            $peopleQuery->orderBy('first_name')->orderBy('last_name');
+        }
+
+        if ($paginate) {
+            $paginatedPeople = $peopleQuery->paginate($perPage);
+
+            return response()->json([
+                'data' => $paginatedPeople->items(),
+                'links' => [
+                    'first' => $paginatedPeople->url(1),
+                    'last' => $paginatedPeople->url($paginatedPeople->lastPage()),
+                    'prev' => $paginatedPeople->previousPageUrl(),
+                    'next' => $paginatedPeople->nextPageUrl(),
+                ],
+                'meta' => [
+                    'current_page' => $paginatedPeople->currentPage(),
+                    'from' => $paginatedPeople->firstItem(),
+                    'last_page' => $paginatedPeople->lastPage(),
+                    'links' => $paginatedPeople->linkCollection()->toArray(),
+                    'path' => $paginatedPeople->path(),
+                    'per_page' => $paginatedPeople->perPage(),
+                    'to' => $paginatedPeople->lastItem(),
+                    'total' => $paginatedPeople->total(),
+                ],
+            ]);
+        }
+
+        return response()->json([
+            'data' => $peopleQuery->get(),
+        ]);
+    }
+
     public function index(Request $request, FamilyTree $familyTree, PersonTreeContextService $personTreeContextService)
     {
         $this->authorize('view', $familyTree);

@@ -1,4 +1,5 @@
 import { api, ApiError } from './api';
+import { config } from '../config';
 import type {
   FamilyTree,
   Person,
@@ -10,6 +11,8 @@ import type {
   MergePeopleResult,
   MergePeoplePreview,
   SearchPeopleOptions,
+  TreeExportArtifact,
+  TreeExportArtifactMetadata,
 } from '@/types';
 
 // Re-export main types for convenience
@@ -195,6 +198,20 @@ class FamilyTreeService {
     return (response as { data: Person[] }).data as TPaginated extends true ? PaginatedApiResponse<Person> : Person[];
   }
 
+  async getGlobalPeople<TPaginated extends boolean = false>(
+    params?: GetPeopleParams & { paginate?: TPaginated }
+  ): Promise<TPaginated extends true ? PaginatedApiResponse<Person> : Person[]> {
+    const response = await api.get<{ data: Person[] } | PaginatedApiResponse<Person>>('/people', {
+      params,
+    });
+
+    if (params?.paginate) {
+      return response as TPaginated extends true ? PaginatedApiResponse<Person> : Person[];
+    }
+
+    return (response as { data: Person[] }).data as TPaginated extends true ? PaginatedApiResponse<Person> : Person[];
+  }
+
   async getPerson(treeId: string, personId: string): Promise<Person> {
     const response = await api.get<{ data: Person }>(`/trees/${treeId}/people/${personId}`);
     return response.data;
@@ -310,6 +327,96 @@ class FamilyTreeService {
       params: { format }
     });
   }
+
+  async listExportArtifacts(treeId: string): Promise<TreeExportArtifact[]> {
+    const response = await api.get<{ data: TreeExportArtifact[] }>(`/trees/${treeId}/export-artifacts`);
+    return response.data;
+  }
+
+  async uploadExportArtifact(
+    treeId: string,
+    file: Blob,
+    fileName: string,
+    metadata?: TreeExportArtifactMetadata
+  ): Promise<TreeExportArtifact> {
+    const formData = new FormData();
+    formData.append('file', file, fileName);
+
+    if (metadata) {
+      appendMultipartMetadata(formData, 'metadata', metadata);
+    }
+
+    const authToken = localStorage.getItem('auth_token');
+    const headers: HeadersInit = {
+      Accept: 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    };
+
+    const response = await fetch(`${config.API_URL}/api/trees/${treeId}/export-artifacts`, {
+      method: 'POST',
+      headers,
+      body: formData,
+      credentials: 'include',
+    });
+
+    const payload: unknown = await response.json().catch(() => ({ message: 'Network error' }));
+
+    if (!response.ok) {
+      const message =
+        typeof payload === 'object' &&
+        payload !== null &&
+        'message' in payload &&
+        typeof payload.message === 'string'
+          ? payload.message
+          : 'Request failed';
+
+      throw new Error(message);
+    }
+
+    if (
+      typeof payload !== 'object' ||
+      payload === null ||
+      !('data' in payload)
+    ) {
+      throw new Error('Invalid response format');
+    }
+
+    return payload.data as TreeExportArtifact;
+  }
+
+  async deleteExportArtifact(treeId: string, artifactId: string): Promise<void> {
+    await api.delete(`/trees/${treeId}/export-artifacts/${artifactId}`);
+  }
+
+  getExportArtifactDownloadUrl(treeId: string, artifactId: string): string {
+    return `${config.API_URL}/api/trees/${treeId}/export-artifacts/${artifactId}/download`;
+  }
 }
 
 export const familyTreeService = new FamilyTreeService();
+
+function appendMultipartMetadata(
+  formData: FormData,
+  path: string,
+  value: unknown
+): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => {
+      appendMultipartMetadata(formData, `${path}[${index}]`, entry);
+    });
+    return;
+  }
+
+  if (typeof value === 'object') {
+    Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
+      appendMultipartMetadata(formData, `${path}[${key}]`, entry);
+    });
+    return;
+  }
+
+  formData.append(path, String(value));
+}

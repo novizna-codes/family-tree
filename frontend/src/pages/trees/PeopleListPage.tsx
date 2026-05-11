@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeftIcon, UserPlusIcon } from '@heroicons/react/24/outline';
+import { ChevronLeftIcon, UserPlusIcon, PencilIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { treeService } from '@/services/treeService';
 import { Button, Input, Select } from '@/components/ui';
 import { DeletePersonModal } from '@/components/trees/DeletePersonModal';
 import { MergePeopleModal } from '@/components/trees/MergePeopleModal';
-import { PersonDetailsModal } from '@/components/trees/PersonDetailsModal';
+import { PersonEditModal } from '@/components/trees/PersonEditModal';
 import type { PaginatedApiResponse, Person } from '@/types';
 
 type SortMode = 'name_asc' | 'created_desc';
@@ -30,6 +30,7 @@ function normalizeName(person: Person): string {
 
 export function PeopleListPage() {
   const { id: treeId } = useParams<{ id: string }>();
+  const isGlobalMode = !treeId;
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sort, setSort] = useState<SortMode>('name_asc');
@@ -38,6 +39,7 @@ export function PeopleListPage() {
   const [personToDelete, setPersonToDelete] = useState<Person | null>(null);
   const [personForMerge, setPersonForMerge] = useState<Person | null>(null);
   const [personForDetails, setPersonForDetails] = useState<Person | null>(null);
+  const [personToEdit, setPersonToEdit] = useState<Person | null>(null);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -58,15 +60,22 @@ export function PeopleListPage() {
   });
 
   const { data: peopleResponse, isLoading: peopleLoading, error: peopleError } = useQuery({
-    queryKey: ['tree', treeId, 'people', { search: debouncedSearch, sort, page, perPage }],
-    queryFn: () => treeService.getPeople(treeId!, {
-      paginate: true,
-      page,
-      per_page: perPage,
-      search: debouncedSearch || undefined,
-      sort,
-    }) as Promise<PaginatedApiResponse<Person>>,
-    enabled: !!treeId,
+    queryKey: [isGlobalMode ? 'people' : 'tree', treeId, 'people', { search: debouncedSearch, sort, page, perPage, mode: isGlobalMode ? 'global' : 'tree' }],
+    queryFn: () => {
+      const params = {
+        paginate: true as const,
+        page,
+        per_page: perPage,
+        search: debouncedSearch || undefined,
+        sort,
+      };
+
+      if (treeId) {
+        return treeService.getPeople(treeId, params) as Promise<PaginatedApiResponse<Person>>;
+      }
+
+      return treeService.getGlobalPeople(params) as Promise<PaginatedApiResponse<Person>>;
+    },
   });
 
   const people = peopleResponse?.data ?? [];
@@ -136,21 +145,25 @@ export function PeopleListPage() {
                 Back to Dashboard
               </Link>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">People in {tree?.name ?? '...'}</h1>
-                <p className="text-sm text-gray-600 mt-1">Manage and browse everyone in this family tree</p>
+                <h1 className="text-2xl font-bold text-gray-900">{isGlobalMode ? 'People' : `People in ${tree?.name ?? '...'}`}</h1>
+                <p className="text-sm text-gray-600 mt-1">{isGlobalMode ? 'Manage and browse everyone in your account' : 'Manage and browse everyone in this family tree'}</p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <Link to={`/trees/${treeId}`}>
-                <Button variant="outline">View Tree</Button>
-              </Link>
-              <Link to={`/trees/${treeId}/people/add`}>
-                <Button>
-                  <UserPlusIcon className="h-4 w-4 mr-2" />
-                  Add Person
-                </Button>
-              </Link>
+              {treeId && (
+                <>
+                  <Link to={`/trees/${treeId}`}>
+                    <Button variant="outline">View Tree</Button>
+                  </Link>
+                  <Link to={`/trees/${treeId}/people/add`}>
+                    <Button>
+                      <UserPlusIcon className="h-4 w-4 mr-2" />
+                      Add Person
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -201,7 +214,7 @@ export function PeopleListPage() {
           <section className="rounded-lg border border-amber-200 bg-amber-50 p-4" aria-label="Potential duplicates">
             <div className="mb-2 text-sm font-semibold text-amber-900">Potential duplicates on this page</div>
             <p className="mb-3 text-xs text-amber-800">
-              Quick suggestions based on matching names in the current page data. Review in tree view before merging.
+              Quick suggestions based on matching names in the current page data.
             </p>
             <div className="space-y-2">
               {duplicateGroups.map((group) => (
@@ -254,58 +267,82 @@ export function PeopleListPage() {
         )}
 
         {!isLoading && !errorMessage && people.length === 0 && (
-          <div className="rounded-md bg-white p-8 text-center text-gray-600">No people found for this tree.</div>
+          <div className="rounded-md bg-white p-8 text-center text-gray-600">
+            {isGlobalMode ? 'No people found.' : 'No people found for this tree.'}
+          </div>
         )}
 
         {!isLoading && !errorMessage && people.length > 0 && (
           <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Gender</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Birth</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Father</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Mother</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {people.map((person) => (
-                  <tr key={person.id}>
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-gray-900">{personName(person)}</p>
-                      {person.nickname && <p className="text-xs text-gray-500">Nickname: {person.nickname}</p>}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{person.gender ?? '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{person.birth_date ?? '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{person.father ? personName(person.father) : '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{person.mother ? personName(person.mother) : '-'}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <div className="flex items-center gap-3">
-                        <Link to={`/trees/${treeId}?focusPersonId=${person.id}`} className="text-blue-600 hover:text-blue-700">
-                          View in Tree
-                        </Link>
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900">Family Members ({people.length})</h3>
+                <div className="text-sm text-gray-600">
+                  <span className="bg-gray-50 px-2 py-1 rounded text-xs border mr-2">Click: Details</span>
+                </div>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-200">
+              {people.map((person) => {
+                const birthYear = person.birth_date ? new Date(person.birth_date).getFullYear() : null;
+
+                const handlePersonClick = () => {
+                  setPersonForDetails(person);
+                };
+
+                return (
+                  <div key={person.id} className="px-6 py-4 hover:bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
                         <button
                           type="button"
-                          className="text-blue-600 hover:text-blue-700"
-                          onClick={() => setPersonForDetails(person)}
+                          className="text-sm font-medium text-gray-900 hover:text-blue-600"
+                          onClick={handlePersonClick}
                         >
-                          Details
+                          {personName(person)}
+                        </button>
+                        <div className="mt-1 text-sm text-gray-600">
+                          {birthYear !== null && <span>Born {birthYear}</span>}
+                          {person.birth_place && <span>{birthYear !== null ? ' • ' : ''}{person.birth_place}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => setPersonToEdit(person)}
+                          className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        >
+                          <PencilIcon className="h-3 w-3 mr-1" />
+                          Edit
                         </button>
                         <button
                           type="button"
-                          className="text-red-600 hover:text-red-700"
                           onClick={() => setPersonToDelete(person)}
+                          className="inline-flex items-center px-2.5 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                         >
+                          <TrashIcon className="h-3 w-3 mr-1" />
                           Delete
                         </button>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${person.gender === 'M'
+                          ? 'bg-blue-100 text-blue-800'
+                          : person.gender === 'F'
+                            ? 'bg-pink-100 text-pink-800'
+                            : 'bg-gray-100 text-gray-800'
+                          }`}>
+                          {person.gender === 'M' ? 'Male' : person.gender === 'F' ? 'Female' : 'Other'}
+                        </span>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${person.is_living
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-800'
+                          }`}>
+                          {person.is_living ? 'Living' : 'Deceased'}
+                        </span>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 px-4 py-3">
               <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={currentPage <= 1}>
@@ -350,12 +387,113 @@ export function PeopleListPage() {
           />
         )}
 
-        {personForDetails && (
-          <PersonDetailsModal
+        {treeId && personToEdit && (
+          <PersonEditModal
             isOpen
-            onClose={() => setPersonForDetails(null)}
-            person={personForDetails}
+            onClose={() => setPersonToEdit(null)}
+            person={personToEdit}
+            treeId={treeId}
           />
+        )}
+
+        {personForDetails && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-semibold text-gray-900">{personForDetails.full_name}</h3>
+                  <button
+                    type="button"
+                    onClick={() => setPersonForDetails(null)}
+                    className="rounded-md p-2 inline-flex items-center justify-center text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                  >
+                    <span className="sr-only">Close</span>
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <span className="font-medium text-gray-700">Full Name:</span>
+                    <span className="ml-2 text-gray-900">{personForDetails.full_name}</span>
+                  </div>
+
+                  {personForDetails.maiden_name && (
+                    <div>
+                      <span className="font-medium text-gray-700">Maiden Name:</span>
+                      <span className="ml-2 text-gray-900">{personForDetails.maiden_name}</span>
+                    </div>
+                  )}
+
+                  <div>
+                    <span className="font-medium text-gray-700">Gender:</span>
+                    <span className="ml-2 text-gray-900">
+                      {personForDetails.gender === 'M' ? 'Male' : personForDetails.gender === 'F' ? 'Female' : 'Other'}
+                    </span>
+                  </div>
+
+                  {personForDetails.birth_date && (
+                    <div>
+                      <span className="font-medium text-gray-700">Birth Date:</span>
+                      <span className="ml-2 text-gray-900">{new Date(personForDetails.birth_date).toLocaleDateString()}</span>
+                    </div>
+                  )}
+
+                  {personForDetails.birth_place && (
+                    <div>
+                      <span className="font-medium text-gray-700">Birth Place:</span>
+                      <span className="ml-2 text-gray-900">{personForDetails.birth_place}</span>
+                    </div>
+                  )}
+
+                  <div>
+                    <span className="font-medium text-gray-700">Status:</span>
+                    <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${personForDetails.is_living
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-gray-100 text-gray-800'
+                      }`}>
+                      {personForDetails.is_living ? 'Living' : 'Deceased'}
+                    </span>
+                  </div>
+
+                  {personForDetails.notes && (
+                    <div>
+                      <span className="font-medium text-gray-700">Notes:</span>
+                      <p className="mt-1 text-gray-900 bg-gray-50 p-3 rounded-md">{personForDetails.notes}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-8 flex flex-wrap justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPersonToEdit(personForDetails);
+                      setPersonForDetails(null);
+                    }}
+                    className="text-sm"
+                  >
+                    <PencilIcon className="h-4 w-4 mr-1" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      setPersonToDelete(personForDetails);
+                      setPersonForDetails(null);
+                    }}
+                    className="text-sm"
+                  >
+                    <TrashIcon className="h-4 w-4 mr-1" />
+                    Delete
+                  </Button>
+                  <Button variant="outline" onClick={() => setPersonForDetails(null)} className="text-sm">
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </div>

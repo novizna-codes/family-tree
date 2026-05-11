@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { TreeViewPage } from '@/pages/trees/TreeViewPage';
@@ -90,13 +90,36 @@ describe('TreeViewPage', () => {
     });
   });
 
-  it('shows a visible People header action linking to people list', async () => {
+  it('shows More actions menu and reveals secondary actions', async () => {
     mockedTreeService.getTree.mockResolvedValue(tree);
     mockedTreeService.getVisualization.mockResolvedValue(visualization);
 
     renderPage('/trees/tree-1');
 
+    const menuButton = await screen.findByRole('button', { name: /more actions/i });
+    fireEvent.click(menuButton);
+
     const peopleLink = await screen.findByRole('link', { name: /people/i });
-    expect(peopleLink).toHaveAttribute('href', '/trees/tree-1/people');
+    expect(peopleLink).toHaveAttribute('href', '/people');
+
+    expect(screen.getByRole('menuitem', { name: /print \/ export/i })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /show help and legend/i })).toBeInTheDocument();
+  });
+
+  it('supports keyboard interaction for More actions button', async () => {
+    mockedTreeService.getTree.mockResolvedValue(tree);
+    mockedTreeService.getVisualization.mockResolvedValue(visualization);
+
+    renderPage('/trees/tree-1');
+
+    const menuButton = await screen.findByRole('button', { name: /more actions/i });
+    fireEvent.click(menuButton);
+    expect(screen.getByRole('menu', { name: /more actions/i })).toBeInTheDocument();
+
+    fireEvent.keyDown(menuButton, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('menu', { name: /more actions/i })).not.toBeInTheDocument();
+    });
   });
 });

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeftIcon, UserPlusIcon, PresentationChartLineIcon, ListBulletIcon, LinkIcon, PrinterIcon, PencilIcon, TrashIcon, XMarkIcon, ClipboardIcon, UsersIcon } from '@heroicons/react/24/outline';
+import { ChevronLeftIcon, UserPlusIcon, PresentationChartLineIcon, ListBulletIcon, LinkIcon, PrinterIcon, PencilIcon, TrashIcon, XMarkIcon, ClipboardIcon, UsersIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import { treeService } from '@/services/treeService';
 import { ApiError } from '@/services/api';
 import toast from 'react-hot-toast';
@@ -44,7 +44,9 @@ export const TreeViewPage: React.FC = () => {
   const [personToMergeKeep, setPersonToMergeKeep] = useState<Person | null>(null);
   const [showOverlays, setShowOverlays] = useState(true);
   const [showNavigationHelp, setShowNavigationHelp] = useState(true);
+  const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const treeElementRef = useRef<HTMLDivElement>(null);
+  const moreActionsMenuRef = useRef<HTMLDivElement>(null);
 
   type CompactRelationship = PersonSpouse['relationship'] & {
     person1_id?: string;
@@ -306,45 +308,92 @@ export const TreeViewPage: React.FC = () => {
               )}
 
               {/* Print Button */}
-              {people.length > 0 && (
-                <div className="flex items-center space-x-2">
-                  <label className="flex items-center cursor-pointer mr-2">
-                    <input
-                      type="checkbox"
-                      checked={showOverlays}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setShowOverlays(checked);
-                        if (checked) {
-                          setShowNavigationHelp(true);
-                        }
-                      }}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-700 font-medium">Show Help & Legend</span>
-                  </label>
-                  <Button
-                    variant="outline"
-                    onClick={handleOpenPrintModal}
-                  >
-                    <PrinterIcon className="h-4 w-4 mr-2" />
-                    Print / Export
-                  </Button>
-                </div>
-              )}
-
               <Link to={`/trees/${id}/people/add`}>
                 <Button>
                   <UserPlusIcon className="h-4 w-4 mr-2" />
                   Add Person
                 </Button>
               </Link>
-              <Link to={`/trees/${id}/people`}>
-                <Button variant="outline">
-                  <UsersIcon className="h-4 w-4 mr-2" />
-                  People
-                </Button>
-              </Link>
+
+              {people.length > 0 && (
+                <div className="relative" ref={moreActionsMenuRef}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setMoreActionsOpen((previousState) => !previousState)}
+                    onBlur={(event) => {
+                      const relatedTarget = event.relatedTarget as Node | null;
+
+                      if (relatedTarget && moreActionsMenuRef.current?.contains(relatedTarget)) {
+                        return;
+                      }
+
+                      setMoreActionsOpen(false);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        setMoreActionsOpen(false);
+                        event.currentTarget.blur();
+                      }
+                    }}
+                    aria-haspopup="menu"
+                    aria-expanded={moreActionsOpen}
+                    aria-controls="tree-view-more-actions-menu"
+                    aria-label="Open more actions"
+                  >
+                    <EllipsisVerticalIcon className="h-4 w-4 mr-2" />
+                    More actions
+                  </Button>
+
+                  {moreActionsOpen && (
+                    <div
+                      id="tree-view-more-actions-menu"
+                      role="menu"
+                      aria-label="More actions"
+                      className="absolute right-0 mt-2 w-64 rounded-lg border border-gray-200 bg-white shadow-lg p-2 z-20"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="w-full flex items-center rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        onClick={() => {
+                          setMoreActionsOpen(false);
+                          handleOpenPrintModal();
+                        }}
+                      >
+                        <PrinterIcon className="h-4 w-4 mr-2" />
+                        Print / Export
+                      </button>
+
+                      <Link
+                        to="/people"
+                        className="w-full flex items-center rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        onClick={() => setMoreActionsOpen(false)}
+                      >
+                        <UsersIcon className="h-4 w-4 mr-2" />
+                        People
+                      </Link>
+
+                      <label className="w-full flex items-center rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showOverlays}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setShowOverlays(checked);
+                            if (checked) {
+                              setShowNavigationHelp(true);
+                            }
+                          }}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          aria-label="Show help and legend"
+                        />
+                        <span className="ml-2">Show Help &amp; Legend</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-gray-700">{user?.name}</span>

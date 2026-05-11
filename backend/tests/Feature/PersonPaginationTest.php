@@ -6,6 +6,7 @@ use App\Models\FamilyTree;
 use App\Models\Person;
 use App\Models\TreePerson;
 use App\Models\User;
+use App\Models\UserGroup;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -90,5 +91,109 @@ class PersonPaginationTest extends TestCase
         $this->assertCount(5, $combinedIds->unique()->all());
         $this->assertEmpty($combinedIds->diff($accessibleIds)->all());
         $this->assertEmpty(collect($accessibleIds)->diff($combinedIds)->all());
+    }
+
+    public function test_global_index_returns_only_accessible_people_for_authenticated_user(): void
+    {
+        $user = User::factory()->create();
+        $owner = User::factory()->create();
+        $outsider = User::factory()->create();
+
+        $userTree = FamilyTree::factory()->create(['user_id' => $user->id]);
+        $ownerTree = FamilyTree::factory()->create(['user_id' => $owner->id]);
+        $outsiderTree = FamilyTree::factory()->create(['user_id' => $outsider->id]);
+
+        $ownedPerson = Person::factory()->create([
+            'family_tree_id' => $userTree->id,
+            'owner_user_id' => $user->id,
+            'first_name' => 'Owned',
+        ]);
+
+        $group = UserGroup::create([
+            'owner_user_id' => $owner->id,
+            'name' => 'Global List Share',
+        ]);
+        $group->members()->attach($user->id);
+
+        $sharedPerson = Person::factory()->create([
+            'family_tree_id' => $ownerTree->id,
+            'owner_user_id' => $owner->id,
+            'first_name' => 'Shared',
+        ]);
+        $sharedPerson->shareGroups()->attach($group->id);
+
+        Person::factory()->create([
+            'family_tree_id' => $outsiderTree->id,
+            'owner_user_id' => $outsider->id,
+            'first_name' => 'Hidden',
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/people?sort=name_asc');
+
+        $response->assertOk()->assertJsonStructure([
+            'data' => [
+                '*' => ['id', 'father', 'mother'],
+            ],
+        ]);
+
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertCount(2, $ids->all());
+        $this->assertTrue($ids->contains($ownedPerson->id));
+        $this->assertTrue($ids->contains($sharedPerson->id));
+    }
+
+    public function test_global_index_paginate_returns_laravel_paginated_shape(): void
+    {
+        $user = User::factory()->create();
+        $tree = FamilyTree::factory()->create(['user_id' => $user->id]);
+
+        Person::factory()->count(3)->create([
+            'family_tree_id' => $tree->id,
+            'owner_user_id' => $user->id,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->getJson('/api/people?paginate=true&per_page=2&page=1');
+
+        $response->assertOk()->assertJsonStructure([
+            'data',
+            'links',
+            'meta' => ['current_page', 'per_page', 'total'],
+        ]);
+    }
+
+    public function test_global_index_search_filters_people_by_name_fields(): void
+    {
+        $user = User::factory()->create();
+        $tree = FamilyTree::factory()->create(['user_id' => $user->id]);
+
+        $matched = Person::factory()->create([
+            'family_tree_id' => $tree->id,
+            'owner_user_id' => $user->id,
+            'first_name' => 'Alex',
+            'last_name' => 'Stone',
+            'maiden_name' => 'Taylor',
+            'nickname' => 'Ace',
+        ]);
+
+        Person::factory()->create([
+            'family_tree_id' => $tree->id,
+            'owner_user_id' => $user->id,
+            'first_name' => 'Brian',
+            'last_name' => 'Mills',
+            'maiden_name' => 'Rivers',
+            'nickname' => 'Bee',
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/people?q=ace');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame($matched->id, $response->json('data.0.id'));
+    }
+
+    public function test_global_index_requires_authentication(): void
+    {
+        $this->getJson('/api/people')->assertUnauthorized();
     }
 }

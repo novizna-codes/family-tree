@@ -23,8 +23,7 @@ export const DashboardPage: React.FC = () => {
   } = useFamilyTreeStore();
   
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const firstTreeId = trees[0]?.id;
-  const peoplePath = firstTreeId ? `/trees/${firstTreeId}/people` : null;
+  const peoplePath = '/people';
 
   useEffect(() => {
     loadTrees();
@@ -53,22 +52,12 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="flex items-center space-x-4">
               <LanguageSwitcher />
-              {peoplePath ? (
-                <Link
-                  to={peoplePath}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  People
-                </Link>
-              ) : (
-                <span
-                  className="text-sm text-gray-400 font-medium cursor-not-allowed"
-                  title="Create a tree first"
-                  aria-disabled="true"
-                >
-                  People
-                </span>
-              )}
+              <Link
+                to={peoplePath}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                People
+              </Link>
               {isAdmin(user) && (
                 <Link 
                   to="/admin"

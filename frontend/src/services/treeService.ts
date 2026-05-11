@@ -1,5 +1,13 @@
 import { familyTreeService, type CreateFamilyTreeData, type CreatePersonData, type CreateRelationshipData, type UpdateRelationshipData, type LinkRelationshipData, type GetPeopleParams } from './familyTreeService';
-import type { CopyPersonRequest, MergePeoplePayload, MergePeoplePreviewPayload, PaginatedApiResponse, Person, SearchPeopleOptions } from '@/types';
+import type {
+  CopyPersonRequest,
+  MergePeoplePayload,
+  MergePeoplePreviewPayload,
+  PaginatedApiResponse,
+  Person,
+  SearchPeopleOptions,
+  TreeExportArtifactMetadata,
+} from '@/types';
 
 // Export familyTreeService as treeService for cleaner imports
 export const treeService = {
@@ -13,6 +21,9 @@ export const treeService = {
     treeId: string,
     params?: GetPeopleParams & { paginate?: TPaginated }
   ) => familyTreeService.getPeople<TPaginated>(treeId, params) as Promise<TPaginated extends true ? PaginatedApiResponse<Person> : Person[]>,
+  getGlobalPeople: <TPaginated extends boolean = false>(
+    params?: GetPeopleParams & { paginate?: TPaginated }
+  ) => familyTreeService.getGlobalPeople<TPaginated>(params) as Promise<TPaginated extends true ? PaginatedApiResponse<Person> : Person[]>,
   getPerson: (treeId: string, personId: string) => familyTreeService.getPerson(treeId, personId),
   createPerson: (treeId: string, data: CreatePersonData) => familyTreeService.createPerson(treeId, data),
   updatePerson: (treeId: string, personId: string, data: Partial<CreatePersonData>) => familyTreeService.updatePerson(treeId, personId, data),
@@ -35,4 +46,10 @@ export const treeService = {
   searchPeople: (query: string, options?: SearchPeopleOptions) => familyTreeService.searchPeople(query, options),
   mergePeople: (payload: MergePeoplePayload) => familyTreeService.mergePeople(payload),
   previewMergePeople: (payload: MergePeoplePreviewPayload) => familyTreeService.previewMergePeople(payload),
+  listExportArtifacts: (treeId: string) => familyTreeService.listExportArtifacts(treeId),
+  uploadExportArtifact: (treeId: string, file: Blob, fileName: string, metadata?: TreeExportArtifactMetadata) =>
+    familyTreeService.uploadExportArtifact(treeId, file, fileName, metadata),
+  deleteExportArtifact: (treeId: string, artifactId: string) => familyTreeService.deleteExportArtifact(treeId, artifactId),
+  getExportArtifactDownloadUrl: (treeId: string, artifactId: string) =>
+    familyTreeService.getExportArtifactDownloadUrl(treeId, artifactId),
 };

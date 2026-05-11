@@ -96,6 +96,16 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: '/people',
+    element: (
+      <SetupGuard>
+        <AuthGuard>
+          <PeopleListPage />
+        </AuthGuard>
+      </SetupGuard>
+    ),
+  },
+  {
     path: '/admin',
     element: (
       <SetupGuard>

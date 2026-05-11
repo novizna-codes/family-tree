@@ -86,7 +86,45 @@ export interface TreeSettings {
     paper_size: 'A4' | 'A3' | 'A2' | 'A1' | 'A0';
     orientation: 'portrait' | 'landscape';
     include_legend: boolean;
+    export_mode?: 'vector_pdf' | 'raster_pdf' | 'svg';
+    bleed_mm?: number;
+    safe_margin_mm?: number;
+    crop_marks?: boolean;
+    tiled?: boolean;
+    tile_overlap_mm?: number;
+    scale?: number;
   };
+}
+
+export interface TreeExportArtifactMetadata {
+  paper_size?: string;
+  orientation?: string;
+  dimensions_mm?: {
+    width: number;
+    height: number;
+  };
+  bleed_mm?: number;
+  safe_margin_mm?: number;
+  crop_marks?: boolean;
+  export_mode?: string;
+  tiled?: boolean;
+  tile_overlap_mm?: number;
+  scale?: number;
+  include_legend?: boolean;
+}
+
+export interface TreeExportArtifact {
+  id: string;
+  tree_id: string;
+  user_id: number;
+  file_name: string;
+  file_path: string;
+  mime_type: string;
+  file_size_bytes: number;
+  checksum_sha256: string | null;
+  metadata: TreeExportArtifactMetadata | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // Person types

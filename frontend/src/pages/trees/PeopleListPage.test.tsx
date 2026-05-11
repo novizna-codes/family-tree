@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PeopleListPage } from '@/pages/trees/PeopleListPage';
 import { treeService } from '@/services/treeService';
 import type { FamilyTree, PaginatedApiResponse, Person } from '@/types';
@@ -11,6 +11,7 @@ vi.mock('@/services/treeService', () => ({
   treeService: {
     getTree: vi.fn(),
     getPeople: vi.fn(),
+    getGlobalPeople: vi.fn(),
   },
 }));
 
@@ -79,7 +80,7 @@ function paginatedResponse(data: Person[], page: number, perPage: number, total:
   };
 }
 
-function renderPage(): void {
+function renderTreePage(): void {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
@@ -92,12 +93,29 @@ function renderPage(): void {
   );
 }
 
+function renderGlobalPage(): void {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/people']}>
+        <Routes>
+          <Route path="/people" element={<PeopleListPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
 describe('PeopleListPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('shows loading then list', async () => {
     mockedTreeService.getTree.mockResolvedValue(tree);
     mockedTreeService.getPeople.mockResolvedValue(paginatedResponse(people, 1, 25, 2));
 
-    renderPage();
+    renderTreePage();
     expect(screen.getByText('Loading people...')).toBeInTheDocument();
     expect(await screen.findByText('Alice Smith')).toBeInTheDocument();
     expect(screen.getByText('2 people')).toBeInTheDocument();
@@ -109,7 +127,7 @@ describe('PeopleListPage', () => {
     mockedTreeService.getTree.mockResolvedValue(tree);
     mockedTreeService.getPeople.mockResolvedValue(paginatedResponse(people, 1, 25, 2));
 
-    renderPage();
+    renderTreePage();
     await screen.findByText('Alice Smith');
     await userEvent.type(screen.getByLabelText('Search people'), 'bobby');
 
@@ -125,44 +143,42 @@ describe('PeopleListPage', () => {
     mockedTreeService.getTree.mockResolvedValue(tree);
     mockedTreeService.getPeople.mockResolvedValue(paginatedResponse([], 1, 25, 0));
 
-    renderPage();
+    renderTreePage();
     expect(await screen.findByText('No people found for this tree.')).toBeInTheDocument();
   });
 
-  it('includes focusPersonId in view-in-tree row link', async () => {
+  it('shows family members list header', async () => {
     mockedTreeService.getTree.mockResolvedValue(tree);
     mockedTreeService.getPeople.mockResolvedValue(paginatedResponse(people, 1, 25, 2));
 
-    renderPage();
+    renderTreePage();
     await screen.findByText('Alice Smith');
 
-    const rowLinks = screen.getAllByRole('link', { name: 'View in Tree' });
-    expect(rowLinks[0]).toHaveAttribute('href', '/trees/tree-1?focusPersonId=p1');
-    expect(rowLinks[1]).toHaveAttribute('href', '/trees/tree-1?focusPersonId=p2');
+    expect(screen.getByText('Family Members (2)')).toBeInTheDocument();
   });
 
-  it('renders details and delete actions for each row', async () => {
+  it('renders edit and delete actions for each row', async () => {
     mockedTreeService.getTree.mockResolvedValue(tree);
     mockedTreeService.getPeople.mockResolvedValue(paginatedResponse(people, 1, 25, 2));
 
-    renderPage();
+    renderTreePage();
     await screen.findByText('Alice Smith');
 
-    expect(screen.getAllByRole('button', { name: 'Details' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Relationships' })).not.toBeInTheDocument();
   });
 
-  it('shows father and mother names in table', async () => {
+  it('shows gender and living badges', async () => {
     mockedTreeService.getTree.mockResolvedValue(tree);
     mockedTreeService.getPeople.mockResolvedValue(paginatedResponse(people, 1, 25, 2));
 
-    renderPage();
+    renderTreePage();
     await screen.findByText('Alice Smith');
 
-    expect(screen.getByRole('columnheader', { name: 'Father' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Mother' })).toBeInTheDocument();
-    expect(screen.getByText('John Stone')).toBeInTheDocument();
-    expect(screen.getByText('Mary Stone')).toBeInTheDocument();
+    expect(screen.getByText('Female')).toBeInTheDocument();
+    expect(screen.getByText('Male')).toBeInTheDocument();
+    expect(screen.getAllByText('Living').length).toBeGreaterThan(0);
   });
 
   it('navigates to next page and requests new page data', async () => {
@@ -175,7 +191,7 @@ describe('PeopleListPage', () => {
       return paginatedResponse([people[0]], 1, 1, 2);
     });
 
-    renderPage();
+    renderTreePage();
     await screen.findByText('Alice Smith');
 
     await userEvent.selectOptions(screen.getByLabelText('Per page'), '10');
@@ -210,7 +226,7 @@ describe('PeopleListPage', () => {
       )
     );
 
-    renderPage();
+    renderTreePage();
 
     expect(await screen.findByText('Potential duplicates on this page')).toBeInTheDocument();
     expect(screen.getByText('Same name + birth date')).toBeInTheDocument();
@@ -218,5 +234,20 @@ describe('PeopleListPage', () => {
     expect(screen.getAllByRole('button', { name: 'Review & Merge' })).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: 'Details' }).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByRole('button', { name: 'Remove' })).toHaveLength(2);
+  });
+
+  it('supports global mode on /people using getGlobalPeople', async () => {
+    mockedTreeService.getGlobalPeople.mockResolvedValue(paginatedResponse(people, 1, 25, 2));
+
+    renderGlobalPage();
+
+    expect(await screen.findByRole('heading', { name: 'People' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'View Tree' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Person' })).not.toBeInTheDocument();
+    expect(mockedTreeService.getTree).not.toHaveBeenCalled();
+
+    expect(mockedTreeService.getGlobalPeople).toHaveBeenCalledWith(
+      expect.objectContaining({ paginate: true, page: 1, per_page: 25, sort: 'name_asc' })
+    );
   });
 });

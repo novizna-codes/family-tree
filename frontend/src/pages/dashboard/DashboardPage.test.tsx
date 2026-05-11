@@ -73,7 +73,7 @@ function renderPage(): void {
 }
 
 describe('DashboardPage header People link', () => {
-  it('shows People link to first tree when trees exist', () => {
+  it('shows global People link when trees exist', () => {
     const loadTrees = vi.fn();
 
     mockedUseAuthStore.mockReturnValue({
@@ -94,11 +94,11 @@ describe('DashboardPage header People link', () => {
     renderPage();
 
     const peopleLink = screen.getByRole('link', { name: 'People' });
-    expect(peopleLink).toHaveAttribute('href', '/trees/tree-1/people');
+    expect(peopleLink).toHaveAttribute('href', '/people');
     expect(loadTrees).toHaveBeenCalledTimes(1);
   });
 
-  it('shows disabled-looking People text with helper title when no trees exist', () => {
+  it('shows global People link when no trees exist', () => {
     mockedUseAuthStore.mockReturnValue({
       user: mockUser,
       logout: vi.fn(),
@@ -116,9 +116,7 @@ describe('DashboardPage header People link', () => {
 
     renderPage();
 
-    const peopleText = screen.getByText('People');
-    expect(peopleText).toHaveAttribute('title', 'Create a tree first');
-    expect(peopleText).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.queryByRole('link', { name: 'People' })).not.toBeInTheDocument();
+    const peopleLink = screen.getByRole('link', { name: 'People' });
+    expect(peopleLink).toHaveAttribute('href', '/people');
   });
 });
