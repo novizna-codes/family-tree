@@ -447,15 +447,45 @@ function extractSvgFromElement(element: HTMLElement): SvgExportPayload | null {
 
   const viewBox = clone.getAttribute('viewBox') ?? original.getAttribute('viewBox');
   const rect = original.getBoundingClientRect();
-  const widthAttr = Number.parseFloat(original.getAttribute('width') ?? `${rect.width}`);
-  const heightAttr = Number.parseFloat(original.getAttribute('height') ?? `${rect.height}`);
-  const width = Number.isFinite(widthAttr) && widthAttr > 0 ? widthAttr : Math.max(1, rect.width);
-  const height = Number.isFinite(heightAttr) && heightAttr > 0 ? heightAttr : Math.max(1, rect.height);
+
+  // Priority 1: getBoundingClientRect for actual rendered pixel dimensions.
+  // This correctly handles SVG elements with width="100%" / height="100%",
+  // which Number.parseFloat would incorrectly return as 100 instead of
+  // the actual pixel size.
+  const pixelWidth = rect.width;
+  const pixelHeight = rect.height;
+
+  // Priority 2: Parse width/height attributes as fallback (works in test
+  // environments where elements aren't in the DOM and getBoundingClientRect
+  // returns 0).  Skip attribute parsing if the value contains '%' since
+  // Number.parseFloat would give the wrong result.
+  const widthAttr = original.getAttribute('width');
+  const heightAttr = original.getAttribute('height');
+  const attrWidth = widthAttr && !widthAttr.includes('%') ? Number.parseFloat(widthAttr) : NaN;
+  const attrHeight = heightAttr && !heightAttr.includes('%') ? Number.parseFloat(heightAttr) : NaN;
+
+  // Priority 3: Parse viewBox as further fallback (e.g., "minX minY w h")
+  let viewBoxWidth = 0;
+  let viewBoxHeight = 0;
+  if (viewBox) {
+    const parts = viewBox.trim().split(/[\s,]+/).map(Number);
+    if (parts.length === 4 && parts.every(isFinite)) {
+      viewBoxWidth = parts[2];
+      viewBoxHeight = parts[3];
+    }
+  }
+
+  const width =
+    pixelWidth > 0 ? pixelWidth :
+    (Number.isFinite(attrWidth) && attrWidth > 0 ? attrWidth :
+    (viewBoxWidth > 0 ? viewBoxWidth : 800));
+  const height =
+    pixelHeight > 0 ? pixelHeight :
+    (Number.isFinite(attrHeight) && attrHeight > 0 ? attrHeight :
+    (viewBoxHeight > 0 ? viewBoxHeight : 600));
 
   if (!viewBox) {
-    if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
-      clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    }
+    clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
   } else {
     clone.setAttribute('viewBox', viewBox);
   }
