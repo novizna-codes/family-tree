@@ -146,7 +146,6 @@ describe('PrintModal', () => {
     await waitFor(() => {
       expect(mockedPrintService.generate).toHaveBeenCalledWith(
         tree,
-        people,
         expect.any(HTMLDivElement),
         expect.objectContaining({
           paperSize: 'A2',

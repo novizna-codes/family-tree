@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import {
   DEFAULT_PRESS_OPTIONS,
   PrintService,
+  type DpiPreset,
   type ExportMode,
   type Orientation,
   type PaperSize,
@@ -41,6 +42,7 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
       tiled: printSettings?.tiled ?? DEFAULT_PRESS_OPTIONS.tiled,
       tileOverlapMm: printSettings?.tile_overlap_mm ?? DEFAULT_PRESS_OPTIONS.tileOverlapMm,
       scale: printSettings?.scale ?? DEFAULT_PRESS_OPTIONS.scale,
+      dpi: printSettings?.dpi ?? DEFAULT_PRESS_OPTIONS.dpi,
     };
   }, [tree.settings]);
 
@@ -54,6 +56,7 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
   const [tiled, setTiled] = useState<boolean>(initialOptions.tiled);
   const [tileOverlapMm, setTileOverlapMm] = useState<number>(initialOptions.tileOverlapMm);
   const [scale, setScale] = useState<number>(initialOptions.scale);
+  const [dpi, setDpi] = useState<DpiPreset>(initialOptions.dpi);
   const [storeDigitally, setStoreDigitally] = useState<boolean>(true);
 
   const options = useMemo<PressPrintOptions>(
@@ -68,8 +71,9 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
       tiled,
       tileOverlapMm,
       scale,
+      dpi,
     }),
-    [paperSize, orientation, exportMode, bleedMm, safeMarginMm, cropMarks, includeLegend, tiled, tileOverlapMm, scale]
+    [paperSize, orientation, exportMode, bleedMm, safeMarginMm, cropMarks, includeLegend, tiled, tileOverlapMm, scale, dpi]
   );
 
   const validationWarnings = useMemo<string[]>(() => {
@@ -109,7 +113,7 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
 
     setIsGenerating(true);
     try {
-      const artifact = await PrintService.generate(tree, people, treeElement, options);
+      const artifact = await PrintService.generate(tree, treeElement, options);
       PrintService.downloadArtifact(artifact);
       console.info(`[PrintModal] Downloaded export using: ${artifact.renderMode}`);
 
@@ -125,6 +129,7 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
             tiled: options.tiled,
             tile_overlap_mm: options.tileOverlapMm,
             scale: options.scale,
+            dpi: dpi,
             include_legend: options.includeLegend,
           });
           toast.success('Export generated, downloaded, and saved digitally!');
@@ -177,6 +182,7 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600"
+              aria-label="Close print dialog"
             >
               <XMarkIcon className="h-6 w-6" />
             </button>
@@ -261,6 +267,17 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
                 value={tileOverlapMm}
                 onChange={(event) => setTileOverlapMm(Number(event.target.value))}
               />
+
+              <Select
+                label="DPI"
+                value={dpi}
+                onChange={(event) => setDpi(Number(event.target.value) as DpiPreset)}
+                options={[
+                  { value: 150, label: '150 DPI (draft)' },
+                  { value: 300, label: '300 DPI (print)' },
+                  { value: 600, label: '600 DPI (max)' },
+                ]}
+              />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -309,7 +326,7 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
                   Press: bleed {bleedMm}mm · safe margin {safeMarginMm}mm · crop marks {cropMarks ? 'on' : 'off'}
                 </div>
                 <div>
-                  Output: {tiled ? `tiled (${tileOverlapMm}mm overlap)` : 'single page'} · scale {scale}x
+                  Output: {tiled ? `tiled (${tileOverlapMm}mm overlap)` : 'single page'} · scale {scale}x · {dpi} DPI
                 </div>
                 <div>Family Members: {people.length}</div>
                 <div>Legend: {includeLegend ? 'included' : 'excluded'}</div>
@@ -327,7 +344,7 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
               variant="outline"
               onClick={handlePrint}
               disabled={hasValidationErrors}
-              className="flex items-center"
+              className         className="flex items-center"
             >
               <PrinterIcon className="h-4 w-4 mr-2" />
               Print

@@ -93,6 +93,7 @@ export interface TreeSettings {
     tiled?: boolean;
     tile_overlap_mm?: number;
     scale?: number;
+    dpi?: number;
   };
 }
 
@@ -110,6 +111,7 @@ export interface TreeExportArtifactMetadata {
   tiled?: boolean;
   tile_overlap_mm?: number;
   scale?: number;
+  dpi?: number;
   include_legend?: boolean;
 }
 

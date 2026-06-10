@@ -30,21 +30,22 @@ class TreeExportArtifactController extends Controller
         $this->authorize('update', $familyTree);
 
         $validated = $request->validate([
-            'file' => 'required|file|mimetypes:application/pdf,image/svg+xml|max:51200',
+            'file' => 'required|file|mimetypes:application/pdf,image/svg+xml|max:204800',
             'metadata' => 'nullable|array',
             'metadata.paper_size' => 'nullable|string',
             'metadata.orientation' => 'nullable|string',
             'metadata.dimensions_mm' => 'nullable|array',
             'metadata.dimensions_mm.width' => 'nullable|numeric',
             'metadata.dimensions_mm.height' => 'nullable|numeric',
-            'metadata.bleed_mm' => 'nullable|numeric',
-            'metadata.safe_margin_mm' => 'nullable|numeric',
+            'metadata.bleed_mm' => 'nullable|numeric|min:0|max:10',
+            'metadata.safe_margin_mm' => 'nullable|numeric|min:0|max:50',
             'metadata.crop_marks' => 'nullable|boolean',
             'metadata.export_mode' => 'nullable|string',
             'metadata.tiled' => 'nullable|boolean',
-            'metadata.tile_overlap_mm' => 'nullable|numeric',
-            'metadata.scale' => 'nullable|numeric',
+            'metadata.tile_overlap_mm' => 'nullable|numeric|min:0|max:20',
+            'metadata.scale' => 'nullable|numeric|min:1|max:4',
             'metadata.include_legend' => 'nullable|boolean',
+            'metadata.dpi' => 'nullable|integer|in:150,300,600',
         ]);
 
         $file = $validated['file'];
@@ -56,7 +57,9 @@ class TreeExportArtifactController extends Controller
             'file_path' => $filePath,
             'mime_type' => $file->getMimeType() ?? 'application/octet-stream',
             'file_size_bytes' => $file->getSize(),
-            'checksum_sha256' => hash_file('sha256', $file->getRealPath()),
+            'checksum_sha256' => $file->getRealPath()
+              ? hash_file('sha256', $file->getRealPath())
+              : null,
             'metadata' => $validated['metadata'] ?? null,
         ]);
 
