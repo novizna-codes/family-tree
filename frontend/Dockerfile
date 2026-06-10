@@ -55,9 +55,8 @@ CMD ["./start-dev.sh"]
 # Production stage with optimized nginx
 FROM nginx:1.25-alpine AS production
 
-# Install curl for health checks and security updates
-RUN apk add --no-cache curl \
-    && apk upgrade
+# Install curl for health checks
+RUN apk add --no-cache curl
 
 # Copy optimized nginx configuration
 COPY docker/nginx.conf /etc/nginx/nginx.conf

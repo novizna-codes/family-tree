@@ -25,6 +25,12 @@ interface PrintModalProps {
   treeElement: HTMLElement | null;
 }
 
+const DPI_PRESETS: readonly DpiPreset[] = [150, 300, 600];
+
+function resolveDpiPreset(value: number | undefined): DpiPreset {
+  return DPI_PRESETS.includes(value as DpiPreset) ? (value as DpiPreset) : DEFAULT_PRESS_OPTIONS.dpi;
+}
+
 export function PrintModal({ isOpen, onClose, tree, people, treeElement }: PrintModalProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const initialOptions = useMemo<PressPrintOptions>(() => {
@@ -42,7 +48,7 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
       tiled: printSettings?.tiled ?? DEFAULT_PRESS_OPTIONS.tiled,
       tileOverlapMm: printSettings?.tile_overlap_mm ?? DEFAULT_PRESS_OPTIONS.tileOverlapMm,
       scale: printSettings?.scale ?? DEFAULT_PRESS_OPTIONS.scale,
-      dpi: printSettings?.dpi ?? DEFAULT_PRESS_OPTIONS.dpi,
+      dpi: resolveDpiPreset(printSettings?.dpi),
     };
   }, [tree.settings]);
 
@@ -349,7 +355,7 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
               variant="outline"
               onClick={handlePrint}
               disabled={hasValidationErrors}
-              className         className="flex items-center"
+              className="flex items-center"
             >
               <PrinterIcon className="h-4 w-4 mr-2" />
               Print
