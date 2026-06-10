@@ -73,13 +73,21 @@ class FamilyTreeController extends Controller
     {
         $this->authorize('update', $familyTree);
 
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'settings' => 'nullable|array',
+            'settings.print.paper_size' => 'nullable|in:A0,A1,A2,A3,A4',
+            'settings.print.orientation' => 'nullable|in:portrait,landscape',
         ]);
 
-        $familyTree->update($request->only(['name', 'description', 'settings']));
+        $existing = $familyTree->settings ?? [];
+        $incoming = $validated['settings'] ?? [];
+        $familyTree->update([
+            'name' => $validated['name'],
+            'description' => $validated['description'] ?? null,
+            'settings' => array_replace_recursive($existing, $incoming),
+        ]);
 
         return response()->json([
             'data' => $familyTree,

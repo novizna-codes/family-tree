@@ -330,6 +330,11 @@ export function PrintModal({ isOpen, onClose, tree, people, treeElement }: Print
                 </div>
                 <div>Family Members: {people.length}</div>
                 <div>Legend: {includeLegend ? 'included' : 'excluded'}</div>
+                {exportMode === 'vector_pdf' && (
+                  <div className="text-amber-600 bg-amber-50 rounded px-2 py-1 mt-2">
+                    ⚠️ Vector mode may not display non-Latin text correctly. Use PDF (raster) for full script support.
+                  </div>
+                )}
               </div>
             </div>
           </div>

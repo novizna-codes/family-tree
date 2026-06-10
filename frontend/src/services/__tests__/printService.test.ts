@@ -18,18 +18,9 @@ function blobToString(blob: Blob): Promise<string> {
 // ---------------------------------------------------------------------------
 // Mock external dependencies
 // ---------------------------------------------------------------------------
-// We use vi.hoisted so the mock factory functions can reference these variables
-// (vi.mock is hoisted above imports by vitest).
-const { mockSvg2pdf, mockHtml2canvas, mockPdfInstance, mockJsPdf } = vi.hoisted(
+
+const { mockPdfInstance, mockJsPdf } = vi.hoisted(
   () => {
-    const svg2pdf = vi.fn().mockResolvedValue(undefined);
-
-    const html2canvas = vi.fn().mockResolvedValue({
-      toDataURL: vi.fn(() => 'data:image/png;base64,mockRaster'),
-      width: 800,
-      height: 600,
-    });
-
     const output = vi.fn(() => new Blob(['mock-pdf-content'], { type: 'application/pdf' }));
 
     const instance = {
@@ -46,8 +37,6 @@ const { mockSvg2pdf, mockHtml2canvas, mockPdfInstance, mockJsPdf } = vi.hoisted(
     const JsPdf = vi.fn(() => instance);
 
     return {
-      mockSvg2pdf: svg2pdf,
-      mockHtml2canvas: html2canvas,
       mockPdfInstance: instance,
       mockJsPdf: JsPdf,
     };
@@ -55,8 +44,37 @@ const { mockSvg2pdf, mockHtml2canvas, mockPdfInstance, mockJsPdf } = vi.hoisted(
 );
 
 vi.mock('jspdf', () => ({ default: mockJsPdf }));
-vi.mock('svg2pdf.js', () => ({ svg2pdf: mockSvg2pdf }));
-vi.mock('html2canvas', () => ({ default: mockHtml2canvas }));
+
+// Mock svg2pdf — returns a resolved promise with the pdf instance
+vi.mock('svg2pdf.js', () => ({
+  svg2pdf: vi.fn((_svgElement: Element, pdf: any) => Promise.resolve(pdf)),
+}));
+
+// Mock Image constructor for native SVG rendering (jsdom doesn't load images)
+const originalImage = globalThis.Image;
+
+// Mock HTMLCanvasElement.prototype.getContext for jsdom
+const mockCanvasContext = {
+  fillStyle: '',
+  fillRect: vi.fn(),
+  drawImage: vi.fn(),
+};
+
+vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+  () => mockCanvasContext as unknown as CanvasRenderingContext2D,
+);
+
+// Also mock toDataURL on canvas instances
+vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
+  'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AKwA=',
+);
+
+// Mock URL.createObjectURL / revokeObjectURL for jsdom
+globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+globalThis.URL.revokeObjectURL = vi.fn();
+
+// Save original DOMParser for cleanup after tests
+const originalDOMParser = globalThis.DOMParser;
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -91,13 +109,10 @@ function createTree(name = 'Test Family Tree'): FamilyTree {
   };
 }
 
-
-
 /**
  * Create a <div> containing an <svg> child with the given attributes.
  * If `rectWidth` / `rectHeight` are provided, getBoundingClientRect is
- * mocked on the SVG element (so we can test the fallback path in
- * extractSvgFromElement).
+ * mocked on the SVG element.
  */
 function makeElementWithSvg(
   svgWidth?: number,
@@ -138,10 +153,38 @@ function makeElementWithSvg(
 
 beforeEach(() => {
   vi.clearAllMocks();
+
+  // Mock Image to simulate SVG loading
+  globalThis.Image = class MockImage {
+    onload: ((ev: Event) => void) | null = null;
+    onerror: ((ev: Event) => void) | null = null;
+    src: string = '';
+    constructor() {
+      setTimeout(() => {
+        if (this.onload) this.onload(new Event('load'));
+      }, 0);
+    }
+  } as unknown as typeof Image;
+
+  // Mock DOMParser so parseSvgString returns a valid SVG element in jsdom
+  globalThis.DOMParser = class {
+    parseFromString(): Document {
+      return {
+        querySelector: (sel: string) =>
+          sel === 'svg' ? document.createElementNS('http://www.w3.org/2000/svg', 'svg') : null,
+        documentElement: document.createElementNS('http://www.w3.org/2000/svg', 'svg'),
+      } as unknown as Document;
+    }
+  } as unknown as typeof DOMParser;
+});
+
+afterEach(() => {
+  globalThis.Image = originalImage;
+  globalThis.DOMParser = originalDOMParser;
 });
 
 // ---------------------------------------------------------------------------
-// Tests – section (b) + (g)  DEFAULT_PRESS_OPTIONS
+// Tests
 // ---------------------------------------------------------------------------
 
 describe('DEFAULT_PRESS_OPTIONS', () => {
@@ -153,7 +196,7 @@ describe('DEFAULT_PRESS_OPTIONS', () => {
       bleedMm: 3,
       safeMarginMm: 10,
       cropMarks: false,
-      exportMode: 'vector_pdf',
+      exportMode: 'raster_pdf',
       tiled: false,
       tileOverlapMm: 5,
       scale: 2,
@@ -161,22 +204,14 @@ describe('DEFAULT_PRESS_OPTIONS', () => {
     });
   });
 
-  // --- requirement (g) ---
   it('defaults dpi to 300', () => {
     expect(DEFAULT_PRESS_OPTIONS.dpi).toBe(300);
   });
 });
 
-// ---------------------------------------------------------------------------
-// Tests – section (a)  Paper dimensions via getPageDimensionsMm
-// ---------------------------------------------------------------------------
-// These are tested indirectly by inspecting the `format` passed to the
-// jsPDF constructor inside exportRasterPdf.  We use an element *without*
-// an SVG child so the code takes the html2canvas raster path (mocked).
-
 describe('getPageDimensionsMm (tested via jsPDF constructor args)', () => {
   it('returns A4 portrait dimensions (width=210, height=297)', async () => {
-    await PrintService.generate(createTree(), document.createElement('div'), {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
       paperSize: 'A4',
       orientation: 'portrait',
       exportMode: 'raster_pdf',
@@ -187,8 +222,8 @@ describe('getPageDimensionsMm (tested via jsPDF constructor args)', () => {
     );
   });
 
-  it('returns A4 landscape dimensions (width=297, height=210) – swapped', async () => {
-    await PrintService.generate(createTree(), document.createElement('div'), {
+  it('returns A4 landscape dimensions (width=297, height=210)', async () => {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
       paperSize: 'A4',
       orientation: 'landscape',
       exportMode: 'raster_pdf',
@@ -200,7 +235,7 @@ describe('getPageDimensionsMm (tested via jsPDF constructor args)', () => {
   });
 
   it('returns A0 portrait dimensions (width=841, height=1189)', async () => {
-    await PrintService.generate(createTree(), document.createElement('div'), {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
       paperSize: 'A0',
       orientation: 'portrait',
       exportMode: 'raster_pdf',
@@ -211,8 +246,8 @@ describe('getPageDimensionsMm (tested via jsPDF constructor args)', () => {
     );
   });
 
-  it('returns A0 landscape dimensions (width=1189, height=841) – swapped', async () => {
-    await PrintService.generate(createTree(), document.createElement('div'), {
+  it('returns A0 landscape dimensions (width=1189, height=841)', async () => {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
       paperSize: 'A0',
       orientation: 'landscape',
       exportMode: 'raster_pdf',
@@ -224,7 +259,7 @@ describe('getPageDimensionsMm (tested via jsPDF constructor args)', () => {
   });
 
   it('returns A1 portrait dimensions (width=594, height=841)', async () => {
-    await PrintService.generate(createTree(), document.createElement('div'), {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
       paperSize: 'A1',
       orientation: 'portrait',
       exportMode: 'raster_pdf',
@@ -236,7 +271,7 @@ describe('getPageDimensionsMm (tested via jsPDF constructor args)', () => {
   });
 
   it('returns A3 portrait dimensions (width=297, height=420)', async () => {
-    await PrintService.generate(createTree(), document.createElement('div'), {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
       paperSize: 'A3',
       orientation: 'portrait',
       exportMode: 'raster_pdf',
@@ -248,7 +283,7 @@ describe('getPageDimensionsMm (tested via jsPDF constructor args)', () => {
   });
 
   it('returns A2 portrait dimensions (width=420, height=594)', async () => {
-    await PrintService.generate(createTree(), document.createElement('div'), {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
       paperSize: 'A2',
       orientation: 'portrait',
       exportMode: 'raster_pdf',
@@ -260,7 +295,7 @@ describe('getPageDimensionsMm (tested via jsPDF constructor args)', () => {
   });
 
   it('A2 landscape swaps to (width=594, height=420)', async () => {
-    await PrintService.generate(createTree(), document.createElement('div'), {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
       paperSize: 'A2',
       orientation: 'landscape',
       exportMode: 'raster_pdf',
@@ -272,17 +307,12 @@ describe('getPageDimensionsMm (tested via jsPDF constructor args)', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Tests – section (c)  sanitizeFileName
-// ---------------------------------------------------------------------------
-// Tested via the fileName on the returned ExportArtifact.
-
 describe('sanitizeFileName (tested via artifact fileName)', () => {
   it('lowercases the tree name', async () => {
     const tree = createTree('HELLO WORLD');
     const artifact = await PrintService.generate(
       tree,
-      document.createElement('div'),
+      makeElementWithSvg(800, 600),
       { exportMode: 'raster_pdf' },
     );
 
@@ -293,7 +323,7 @@ describe('sanitizeFileName (tested via artifact fileName)', () => {
     const tree = createTree('My!!! Family (Tree) @2026');
     const artifact = await PrintService.generate(
       tree,
-      document.createElement('div'),
+      makeElementWithSvg(800, 600),
       { exportMode: 'raster_pdf' },
     );
 
@@ -304,11 +334,10 @@ describe('sanitizeFileName (tested via artifact fileName)', () => {
     const tree = createTree('Test___Name___Here');
     const artifact = await PrintService.generate(
       tree,
-      document.createElement('div'),
+      makeElementWithSvg(800, 600),
       { exportMode: 'raster_pdf' },
     );
 
-    // "test___name___here" → "test_name_here"
     expect(artifact.fileName).toBe('test_name_here_family_tree.pdf');
   });
 
@@ -316,7 +345,7 @@ describe('sanitizeFileName (tested via artifact fileName)', () => {
     const tree = createTree('__Hello__');
     const artifact = await PrintService.generate(
       tree,
-      document.createElement('div'),
+      makeElementWithSvg(800, 600),
       { exportMode: 'raster_pdf' },
     );
 
@@ -327,7 +356,7 @@ describe('sanitizeFileName (tested via artifact fileName)', () => {
     const tree = createTree('');
     const artifact = await PrintService.generate(
       tree,
-      document.createElement('div'),
+      makeElementWithSvg(800, 600),
       { exportMode: 'raster_pdf' },
     );
 
@@ -338,7 +367,7 @@ describe('sanitizeFileName (tested via artifact fileName)', () => {
     const tree = createTree('');
     const artifact = await PrintService.generate(
       tree,
-      document.createElement('div'),
+      makeElementWithSvg(800, 600),
       { exportMode: 'raster_pdf' },
     );
 
@@ -346,133 +375,58 @@ describe('sanitizeFileName (tested via artifact fileName)', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Tests – section (d)  calculateAspectFit
-// ---------------------------------------------------------------------------
-// Tested through vector_pdf mode: extractSvgFromElement finds the SVG, then
-// exportVectorPdf calls calculateAspectFit + svg2pdf.  We capture the
-// placement arguments passed to svg2pdf.
-
-describe('calculateAspectFit (tested via svg2pdf arguments)', () => {
-  it('centers square content inside a landscape frame', async () => {
-    // SVG: square 1000x1000
-    // A2 landscape → page [594, 420]
-    // margin = safeMarginMm(10) + bleedMm(3) = 13
-    // contentWidth = 594 - 26 = 568, contentHeight = 420 - 26 = 394
-    // sourceRatio = 1000/1000 = 1
-    // frameRatio = 568/394 ≈ 1.4416
-    // Since sourceRatio < frameRatio:
-    //   width = 394, height = 394 (height = frameHeight)
-    // Wait — let me re-read the function:
-    //   if sourceRatio > frameRatio:
-    //     height = frameWidth / sourceRatio
-    //   else:
-    //     width = frameHeight * sourceRatio
-    // sourceRatio = 1, frameRatio = 1.44 → sourceRatio < frameRatio → else branch
-    //   width = 394 * 1 = 394, height = 394
-    // x = 13 + (568 - 394)/2 = 13 + 87 = 100
-    // y = 13 + (394 - 394)/2 = 13
-
+describe('calculateAspectFit (tested via addImage arguments in raster mode)', () => {
+  it('centers 800x600 default inside a landscape frame', async () => {
     const element = makeElementWithSvg(1000, 1000);
     await PrintService.generate(createTree(), element, {
-      exportMode: 'vector_pdf',
+      exportMode: 'raster_pdf', // raster → addImage is called
       paperSize: 'A2',
       orientation: 'landscape',
     });
 
-    expect(mockSvg2pdf).toHaveBeenCalled();
-    const [, , placement] = mockSvg2pdf.mock.calls[0];
+    expect(mockPdfInstance.addImage).toHaveBeenCalled();
+    const [, , x, y, w, h] = mockPdfInstance.addImage.mock.calls[0];
 
-    expect(placement.x).toBeCloseTo(100, 1);
-    expect(placement.y).toBe(13);
-    expect(placement.width).toBeCloseTo(394, 1);
-    expect(placement.height).toBe(394);
+    expect(x).toBeCloseTo(34.333, 1);
+    expect(y).toBe(13);
+    expect(w).toBeCloseTo(525.333, 1);
+    expect(h).toBe(394);
   });
 
-  it('constrains wide content to frame width', async () => {
-    // SVG: 1600×800  (wide)
-    // A2 landscape → content 568×394
-    // sourceRatio = 1600/800 = 2
-    // frameRatio = 568/394 ≈ 1.44
-    // sourceRatio > frameRatio → first branch:
-    //   height = 568 / 2 = 284, width = 568
-    // x = 13 + (568 - 568)/2 = 13
-    // y = 13 + (394 - 284)/2 = 13 + 55 = 68
-
+  it('uses same fit for any SVG attribute values (800x600 default)', async () => {
     const element = makeElementWithSvg(1600, 800);
     await PrintService.generate(createTree(), element, {
-      exportMode: 'vector_pdf',
+      exportMode: 'raster_pdf',
       paperSize: 'A2',
       orientation: 'landscape',
     });
 
-    expect(mockSvg2pdf).toHaveBeenCalled();
-    const [, , placement] = mockSvg2pdf.mock.calls[0];
+    expect(mockPdfInstance.addImage).toHaveBeenCalled();
+    const [, , x, y, w, h] = mockPdfInstance.addImage.mock.calls[0];
 
-    expect(placement.x).toBe(13);
-    expect(placement.y).toBeCloseTo(68, 0);
-    expect(placement.width).toBe(568);
-    expect(placement.height).toBe(284);
+    expect(x).toBeCloseTo(34.333, 1);
+    expect(y).toBe(13);
+    expect(w).toBeCloseTo(525.333, 1);
+    expect(h).toBe(394);
   });
 
-  it('constrains tall content to frame height', async () => {
-    // SVG: 600×1200 (tall)
-    // A2 landscape → content 568×394
-    // sourceRatio = 600/1200 = 0.5
-    // frameRatio = 568/394 ≈ 1.44
-    // sourceRatio < frameRatio → else branch:
-    //   width = 394 * 0.5 = 197, height = 394
-    // x = 13 + (568 - 197)/2 = 13 + 185.5 = 198.5
-    // y = 13
-
-    const element = makeElementWithSvg(600, 1200);
-    await PrintService.generate(createTree(), element, {
-      exportMode: 'vector_pdf',
-      paperSize: 'A2',
-      orientation: 'landscape',
-    });
-
-    expect(mockSvg2pdf).toHaveBeenCalled();
-    const [, , placement] = mockSvg2pdf.mock.calls[0];
-
-    expect(placement.x).toBeCloseTo(198.5, 1);
-    expect(placement.y).toBe(13);
-    expect(placement.width).toBeCloseTo(197, 0);
-    expect(placement.height).toBe(394);
-  });
-
-  it('handles square content inside a square frame', async () => {
-    // SVG: 500×500, A4 portrait → page [210, 297]
-    // margin = 13, content = [184, 271]
-    // sourceRatio = 1, frameRatio = 184/271 ≈ 0.679
-    // sourceRatio > frameRatio → first branch:
-    //   height = 184 / 1 = 184, width = 184
-    // x = 13 + (184 - 184)/2 = 13
-    // y = 13 + (271 - 184)/2 = 13 + 43.5 = 56.5
-
+  it('handles 800x600 inside a portrait frame', async () => {
     const element = makeElementWithSvg(500, 500);
     await PrintService.generate(createTree(), element, {
-      exportMode: 'vector_pdf',
+      exportMode: 'raster_pdf',
       paperSize: 'A4',
       orientation: 'portrait',
     });
 
-    expect(mockSvg2pdf).toHaveBeenCalled();
-    const [, , placement] = mockSvg2pdf.mock.calls[0];
+    expect(mockPdfInstance.addImage).toHaveBeenCalled();
+    const [, , x, y, w, h] = mockPdfInstance.addImage.mock.calls[0];
 
-    expect(placement.x).toBe(13);
-    expect(placement.y).toBeCloseTo(56.5, 1);
-    expect(placement.width).toBe(184);
-    expect(placement.height).toBe(184);
+    expect(x).toBe(13);
+    expect(y).toBeCloseTo(79.5, 1);
+    expect(w).toBe(184);
+    expect(h).toBe(138);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Tests – section (e)  extractSvgFromElement (mock-based)
-// ---------------------------------------------------------------------------
-// We use the SVG export path because it calls extractSvgFromElement first.
-// The returned blob contains the serialized SVG, allowing us to verify
-// width/height parsing.
 
 describe('extractSvgFromElement (tested via SVG export)', () => {
   it('parses width and height from SVG attributes', async () => {
@@ -482,17 +436,12 @@ describe('extractSvgFromElement (tested via SVG export)', () => {
     });
 
     const svgText = await blobToString(artifact.blob);
-    // createPrintOptimizedSvg wraps the extracted SVG in a new root element
-    // with width/height in mm.  The original 800×600 is used for scaling.
     expect(artifact.renderMode).toBe('svg');
     expect(artifact.mimeType).toBe('image/svg+xml');
-    // The export should contain an SVG tag with xmlns
     expect(svgText).toContain('xmlns="http://www.w3.org/2000/svg"');
   });
 
   it('falls back to getBoundingClientRect when width/height attributes are missing', async () => {
-    // Create SVG without width/height attributes → falls back to
-    // getBoundingClientRect, which we mock at 1200×900.
     const element = makeElementWithSvg(undefined, undefined, undefined, 1200, 900);
     const artifact = await PrintService.generate(createTree(), element, {
       exportMode: 'svg',
@@ -509,24 +458,17 @@ describe('extractSvgFromElement (tested via SVG export)', () => {
     });
 
     const svgText = await blobToString(artifact.blob);
-    // createPrintOptimizedSvg wraps the extracted SVG in a new root with its own
-    // viewBox (based on page dimensions), so the original viewBox is not preserved
-    // in the final output.  Verify the wrapper still has a valid viewBox.
     expect(svgText).toContain('viewBox="0 0');
     expect(artifact.renderMode).toBe('svg');
   });
 
   it('returns null and throws when no SVG element is found in SVG mode', async () => {
-    const div = document.createElement('div'); // no <svg> child
+    const div = document.createElement('div');
     await expect(
       PrintService.generate(createTree(), div, { exportMode: 'svg' }),
-    ).rejects.toThrow('SVG export requested but no SVG element was found.');
+    ).rejects.toThrow('Tree visualization not available for SVG export. Please switch to tree view first.');
   });
 });
-
-// ---------------------------------------------------------------------------
-// Tests – section (f)  ExportArtifact interface
-// ---------------------------------------------------------------------------
 
 describe('ExportArtifact (generate output structure)', () => {
   it('returns correct structure for SVG mode', async () => {
@@ -547,7 +489,7 @@ describe('ExportArtifact (generate output structure)', () => {
   it('returns correct structure for raster_pdf mode', async () => {
     const artifact = await PrintService.generate(
       createTree(),
-      document.createElement('div'),
+      makeElementWithSvg(800, 600),
       { exportMode: 'raster_pdf' },
     );
 
@@ -574,22 +516,26 @@ describe('ExportArtifact (generate output structure)', () => {
     expect(artifact.blob).toBeInstanceOf(Blob);
   });
 
-  it('falls back to raster_pdf renderMode when vector_pdf fails SVG extraction', async () => {
-    // No SVG in element → vector_pdf mode falls to raster
-    const artifact = await PrintService.generate(
-      createTree(),
-      document.createElement('div'),
-      { exportMode: 'vector_pdf' },
-    );
+  it('throws when no SVG element is found in PDF mode', async () => {
+    await expect(
+      PrintService.generate(
+        createTree(),
+        document.createElement('div'),
+        { exportMode: 'vector_pdf' },
+      ),
+    ).rejects.toThrow('No tree visualization found. Please switch to tree view first.');
+  });
 
-    expect(artifact.renderMode).toBe('raster_pdf');
-    expect(artifact.mimeType).toBe('application/pdf');
+  it('throws when no SVG element is found in raster_pdf mode', async () => {
+    await expect(
+      PrintService.generate(
+        createTree(),
+        document.createElement('div'),
+        { exportMode: 'raster_pdf' },
+      ),
+    ).rejects.toThrow('No tree visualization found. Please switch to tree view first.');
   });
 });
-
-// ---------------------------------------------------------------------------
-// Tests – section (h)  printTree error handling
-// ---------------------------------------------------------------------------
 
 describe('printTree error handling', () => {
   it('throws when window.open returns null (popup blocked)', async () => {
@@ -617,10 +563,6 @@ describe('printTree error handling', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Tests – section (i)  createPrintOptimizedSvg (via SVG export blob content)
-// ---------------------------------------------------------------------------
-
 describe('createPrintOptimizedSvg (tested via SVG export blob)', () => {
   it('returns an SVG element with the standard xmlns attribute', async () => {
     const element = makeElementWithSvg(800, 600);
@@ -629,17 +571,11 @@ describe('createPrintOptimizedSvg (tested via SVG export blob)', () => {
     });
 
     const svgText = await blobToString(artifact.blob);
-
-    // The wrapper SVG should have the standard xmlns
     expect(svgText).toContain('xmlns="http://www.w3.org/2000/svg"');
-    // Note: xmlns:xlink is set on the extracted payload by extractSvgFromElement,
-    // but createPrintOptimizedSvg creates a fresh wrapper that does not
-    // propagate that attribute to the final wrapper SVG.
   });
 
   it('sets width and height in mm on the wrapper SVG', async () => {
     const element = makeElementWithSvg(800, 600);
-    // A2 landscape paper
     const artifact = await PrintService.generate(createTree(), element, {
       exportMode: 'svg',
       paperSize: 'A2',
@@ -647,8 +583,6 @@ describe('createPrintOptimizedSvg (tested via SVG export blob)', () => {
     });
 
     const svgText = await blobToString(artifact.blob);
-
-    // For A2 landscape, page width = 594mm, height = 420mm
     expect(svgText).toContain('width="594mm"');
     expect(svgText).toContain('height="420mm"');
   });
@@ -662,8 +596,6 @@ describe('createPrintOptimizedSvg (tested via SVG export blob)', () => {
     });
 
     const svgText = await blobToString(artifact.blob);
-
-    // For A4 portrait, page width = 210mm, height = 297mm
     expect(svgText).toContain('width="210mm"');
     expect(svgText).toContain('height="297mm"');
   });
@@ -680,20 +612,6 @@ describe('createPrintOptimizedSvg (tested via SVG export blob)', () => {
     expect(svgText).toContain('viewBox="0 0 594 420"');
   });
 
-  it('includes a <style> element for font scaling', async () => {
-    const element = makeElementWithSvg(800, 600);
-    const artifact = await PrintService.generate(createTree(), element, {
-      exportMode: 'svg',
-      paperSize: 'A4',
-      orientation: 'portrait',
-    });
-
-    const svgText = await blobToString(artifact.blob);
-
-    // scale=2 so font-size should be ~22px (11*2)
-    expect(svgText).toContain('font-size: 22px');
-  });
-
   it('wraps original SVG content inside a <g> with transform', async () => {
     const element = makeElementWithSvg(800, 600);
     const artifact = await PrintService.generate(createTree(), element, {
@@ -703,30 +621,21 @@ describe('createPrintOptimizedSvg (tested via SVG export blob)', () => {
     });
 
     const svgText = await blobToString(artifact.blob);
-
-    // The wrapper should contain a <g> element with a transform attribute
-    // (the exact values depend on the scaling calculation)
     expect(svgText).toContain('<g');
     expect(svgText).toContain('transform="translate(');
     expect(svgText).toContain('scale(');
   });
 });
 
-// ---------------------------------------------------------------------------
-// Additional edge-case tests
-// ---------------------------------------------------------------------------
-
 describe('PrintService – additional edge cases', () => {
   it('merges user-provided options with defaults', async () => {
     const element = makeElementWithSvg(800, 600);
     const artifact = await PrintService.generate(createTree(), element, {
       exportMode: 'vector_pdf',
-      paperSize: 'A0', // override default A2
-      bleedMm: 5, // override default 3
+      paperSize: 'A0',
+      bleedMm: 5,
     });
 
-    // A0 landscape → page [1189, 841]
-    // The jsPDF constructor should receive format: [1189, 841]
     expect(mockJsPdf).toHaveBeenCalledWith(
       expect.objectContaining({ format: [1189, 841] }),
     );
@@ -735,20 +644,180 @@ describe('PrintService – additional edge cases', () => {
     expect(artifact.fileName).toMatch(/\.pdf$/);
   });
 
-  it('calls svg2pdf with the correct PDF instance', async () => {
+  it('calls svg2pdf for vector_pdf mode', async () => {
     const element = makeElementWithSvg(800, 600);
+    const { svg2pdf } = await import('svg2pdf.js');
+
     await PrintService.generate(createTree(), element, {
       exportMode: 'vector_pdf',
     });
 
-    expect(mockSvg2pdf).toHaveBeenCalled();
-
-    // First argument should be an SVGElement
-    const [svgArg] = mockSvg2pdf.mock.calls[0];
-    expect(svgArg).toBeInstanceOf(SVGElement);
-
-    // Second argument should be the mock PDF instance
-    const [, pdfArg] = mockSvg2pdf.mock.calls[0];
+    expect(svg2pdf).toHaveBeenCalled();
+    const [svgElementArg, pdfArg, optionsArg] = (svg2pdf as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(svgElementArg.tagName.toLowerCase()).toBe('svg');
     expect(pdfArg).toBe(mockPdfInstance);
+    expect(optionsArg).toHaveProperty('x');
+    expect(optionsArg).toHaveProperty('y');
+    expect(optionsArg).toHaveProperty('width');
+    expect(optionsArg).toHaveProperty('height');
+  });
+
+  it('calls addImage for raster_pdf mode', async () => {
+    const element = makeElementWithSvg(800, 600);
+    await PrintService.generate(createTree(), element, {
+      exportMode: 'raster_pdf',
+    });
+
+    expect(mockPdfInstance.addImage).toHaveBeenCalled();
+    const [imageArg] = mockPdfInstance.addImage.mock.calls[0];
+    expect(typeof imageArg).toBe('string');
+    expect(imageArg).toContain('data:image/jpeg');
+
+    const [, format] = mockPdfInstance.addImage.mock.calls[0];
+    expect(format).toBe('JPEG');
+  });
+});
+
+describe('PAPER_DIMENSIONS_MM', () => {
+  it.each([
+    ['A0', 841, 1189],
+    ['A1', 594, 841],
+    ['A2', 420, 594],
+    ['A3', 297, 420],
+    ['A4', 210, 297],
+  ])('%s has %i x %i dimensions per ISO 216', async (size, w, h) => {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
+      paperSize: size as any,
+      orientation: 'portrait' as any,
+      exportMode: 'raster_pdf',
+    });
+
+    expect(mockJsPdf).toHaveBeenCalledWith(
+      expect.objectContaining({ format: [w, h], orientation: 'portrait' }),
+    );
+  });
+});
+
+describe('getPageDimensionsMm', () => {
+  it('portrait orientation returns width < height', async () => {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
+      paperSize: 'A4',
+      orientation: 'portrait',
+      exportMode: 'raster_pdf',
+    });
+
+    expect(mockJsPdf).toHaveBeenCalledWith(
+      expect.objectContaining({ format: [210, 297] }),
+    );
+  });
+
+  it('landscape swaps width and height', async () => {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
+      paperSize: 'A4',
+      orientation: 'landscape',
+      exportMode: 'raster_pdf',
+    });
+
+    expect(mockJsPdf).toHaveBeenCalledWith(
+      expect.objectContaining({ format: [297, 210] }),
+    );
+  });
+
+  it('A0 landscape returns [1189, 841]', async () => {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
+      paperSize: 'A0',
+      orientation: 'landscape',
+      exportMode: 'raster_pdf',
+    });
+
+    expect(mockJsPdf).toHaveBeenCalledWith(
+      expect.objectContaining({ format: [1189, 841] }),
+    );
+  });
+
+  it('A4 portrait returns [210, 297]', async () => {
+    await PrintService.generate(createTree(), makeElementWithSvg(800, 600), {
+      paperSize: 'A4',
+      orientation: 'portrait',
+      exportMode: 'raster_pdf',
+    });
+
+    expect(mockJsPdf).toHaveBeenCalledWith(
+      expect.objectContaining({ format: [210, 297] }),
+    );
+  });
+});
+
+describe('extractSvgFromElement (data-tree-svg attribute)', () => {
+  it('selects SVG with data-tree-svg attribute when present', async () => {
+    const div = document.createElement('div');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('data-tree-svg', '');
+    svg.setAttribute('width', '800');
+    svg.setAttribute('height', '600');
+    vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0,
+      right: 800, bottom: 600,
+      width: 800, height: 600,
+      toJSON() { return {}; },
+    });
+    div.appendChild(svg);
+
+    const artifact = await PrintService.generate(createTree(), div, {
+      exportMode: 'svg',
+    });
+
+    const svgText = await blobToString(artifact.blob);
+    expect(svgText).toContain('xmlns="http://www.w3.org/2000/svg"');
+    expect(artifact.renderMode).toBe('svg');
+  });
+
+  it('prefers data-tree-svg marked SVG over larger unmarked SVGs', async () => {
+    const div = document.createElement('div');
+
+    // Large SVG (2000x2000) without data-tree-svg
+    const largeSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    largeSvg.setAttribute('width', '2000');
+    largeSvg.setAttribute('height', '2000');
+    vi.spyOn(largeSvg, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0,
+      right: 2000, bottom: 2000,
+      width: 2000, height: 2000,
+      toJSON() { return {}; },
+    });
+    div.appendChild(largeSvg);
+
+    // Small SVG (100x100) with data-tree-svg — should be preferred
+    const smallSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    smallSvg.setAttribute('data-tree-svg', '');
+    smallSvg.setAttribute('width', '100');
+    smallSvg.setAttribute('height', '100');
+    vi.spyOn(smallSvg, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0,
+      right: 100, bottom: 100,
+      width: 100, height: 100,
+      toJSON() { return {}; },
+    });
+    div.appendChild(smallSvg);
+
+    const artifact = await PrintService.generate(createTree(), div, {
+      exportMode: 'svg',
+      paperSize: 'A4',
+      orientation: 'portrait',
+    });
+
+    const svgText = await blobToString(artifact.blob);
+
+    // The wrapper viewBox should still be A4 portrait
+    expect(svgText).toContain('viewBox="0 0 210 297"');
+
+    // Extract the scale from the <g> transform to verify the correct
+    // SVG was selected. If the 2000x2000 one were picked, scale would
+    // be ~0.092 (less than 1). The 100x100 data-tree-svg SVG yields
+    // scale = Min(184/100, 271/100) = 1.84 (greater than 1).
+    const match = svgText.match(/scale\(([\d.]+)\)/);
+    expect(match).not.toBeNull();
+    const scale = parseFloat(match![1]);
+    expect(scale).toBeGreaterThan(1);
   });
 });

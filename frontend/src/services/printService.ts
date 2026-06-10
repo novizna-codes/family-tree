@@ -1,4 +1,3 @@
-import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { svg2pdf } from 'svg2pdf.js';
 import type { FamilyTree } from '@/types';
@@ -36,7 +35,7 @@ export const DEFAULT_PRESS_OPTIONS: PressPrintOptions = {
   bleedMm: 3,
   safeMarginMm: 10,
   cropMarks: false,
-  exportMode: 'vector_pdf',
+  exportMode: 'raster_pdf',
   tiled: false,
   tileOverlapMm: 5,
   scale: 2,
@@ -83,33 +82,34 @@ export class PrintService {
       return this.exportTiledPdf(element, baseName, pageWidth, pageHeight, margin, contentWidth, contentHeight, mergedOptions);
     }
 
-    if (mergedOptions.exportMode === 'vector_pdf') {
-      const svgPayload = extractSvgFromElement(element);
-      if (svgPayload) {
-        try {
-          const pdf = await this.exportVectorPdf(svgPayload, mergedOptions, pageWidth, pageHeight, margin, contentWidth, contentHeight);
-          console.info('[PrintService] Export mode used: vector_pdf');
-          return {
-            fileName: `${baseName}_family_tree.pdf`,
-            mimeType: 'application/pdf',
-            blob: pdf.output('blob'),
-            renderMode: 'vector_pdf',
-          };
-        } catch (err) {
-          console.warn('svg2pdf failed, falling back to high-res raster:', err);
-        }
-      }
+    const svgPayload = extractSvgFromElement(element);
+    if (!svgPayload) {
+      throw new Error('No tree visualization found. Please switch to tree view first.');
     }
 
-    const pdf = await this.exportRasterPdf(element, mergedOptions, pageWidth, pageHeight, margin, contentWidth, contentHeight);
-    const renderMode = mergedOptions.exportMode === 'vector_pdf' ? 'raster_pdf' : 'raster_pdf';
+    const svgString = new XMLSerializer().serializeToString(svgPayload.svg);
 
-    console.info(`[PrintService] Export mode used: ${renderMode}`);
+    const pdf = await this.embedSvgInPdf(
+      svgString,
+      svgPayload.width,
+      svgPayload.height,
+      mergedOptions,
+      pageWidth,
+      pageHeight,
+      margin,
+      contentWidth,
+      contentHeight
+    );
+
+    if (mergedOptions.cropMarks) {
+      drawCropMarks(pdf, pageWidth, pageHeight, mergedOptions.bleedMm);
+    }
+
     return {
       fileName: `${baseName}_family_tree.pdf`,
       mimeType: 'application/pdf',
       blob: pdf.output('blob'),
-      renderMode,
+      renderMode: mergedOptions.exportMode === 'vector_pdf' ? 'vector_pdf' : 'raster_pdf',
     };
   }
 
@@ -147,6 +147,11 @@ export class PrintService {
     try {
       const clonedElement = element.cloneNode(true) as HTMLElement;
 
+      // Remove UI overlays that should not appear in print
+      const ignoreSelectors = '[data-html2canvas-ignore], [data-export-ignore]';
+      const elementsToRemove = clonedElement.querySelectorAll(ignoreSelectors);
+      elementsToRemove.forEach(el => el.remove());
+
       const [pageWidth, pageHeight] = getPageDimensionsMm(
         mergedOptions.paperSize,
         mergedOptions.orientation
@@ -167,25 +172,23 @@ export class PrintService {
               * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
             }
             body { font-family: Arial, sans-serif; }
-            .no-print { display: none !important; }
           </style>
         </head>
-        <body>
-          ${clonedElement.outerHTML}
-        </body>
+        <body></body>
         </html>
       `);
-
       printWindow.document.close();
-
       printWindow.focus();
 
-      // Use a small delay to let the browser render the print layout
+      // Use DOM importNode instead of innerHTML to prevent XSS
+      // from person names containing malicious HTML/script tags
+      const importedNode = printWindow.document.importNode(clonedElement, true);
+      printWindow.document.body.appendChild(importedNode);
+
       setTimeout(() => {
         printWindow.print();
       }, 300);
 
-      // Auto-close only after print completes (or user cancels)
       printWindow.onafterprint = () => {
         printWindow.close();
       };
@@ -195,6 +198,72 @@ export class PrintService {
     }
   }
 
+  // ── Vector PDF via svg2pdf ────────────────────────────────────────────
+  // Converts SVG paths/curves to native PDF vector operators.
+  // Produces infinitely scalable output — identical quality to Canva's
+  // "PDF Print" export.
+  private static async embedVectorSvg(
+    svgString: string,
+    pdf: jsPDF,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<void> {
+    const svgElement = parseSvgString(svgString);
+    await svg2pdf(svgElement, pdf, { x, y, width, height });
+  }
+
+  // ── Raster SVG-to-canvas renderer (fallback) ──────────────────────────
+  // Uses the browser's native SVG renderer (Image + Blob URL + canvas).
+  // Falls back to this when vector_pdf mode fails.
+  private static renderSvgToCanvas(
+    svgString: string,
+    targetWidthMm: number,
+    targetHeightMm: number,
+    dpi: number
+  ): Promise<HTMLCanvasElement> {
+    const pxPerMm = dpi / 25.4;
+    const canvasWidth = Math.round(targetWidthMm * pxPerMm);
+    const canvasHeight = Math.round(targetHeightMm * pxPerMm);
+
+    const maxPx = 16_384;
+    const clampW = Math.min(canvasWidth, maxPx);
+    const clampH = Math.min(canvasHeight, maxPx);
+
+    return new Promise<HTMLCanvasElement>((resolve, reject) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = clampW;
+      canvas.height = clampH;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Failed to get 2D canvas context for PDF rendering.'));
+        return;
+      }
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, clampW, clampH);
+
+      const img = new Image();
+      const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+
+      img.onload = (): void => {
+        ctx.drawImage(img, 0, 0, clampW, clampH);
+        URL.revokeObjectURL(url);
+        resolve(canvas);
+      };
+
+      img.onerror = (): void => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Failed to render SVG to canvas (Image load error).'));
+      };
+
+      img.src = url;
+    });
+  }
+
   private static async exportSvg(
     element: HTMLElement,
     baseName: string,
@@ -202,7 +271,7 @@ export class PrintService {
   ): Promise<ExportArtifact> {
     const svgPayload = extractSvgFromElement(element);
     if (!svgPayload) {
-      throw new Error('SVG export requested but no SVG element was found.');
+      throw new Error('Tree visualization not available for SVG export. Please switch to tree view first.');
     }
 
     const [pageWidth, pageHeight] = getPageDimensionsMm(options.paperSize, options.orientation);
@@ -212,8 +281,7 @@ export class PrintService {
       svgPayload,
       pageWidth,
       pageHeight,
-      margin,
-      options.scale
+      margin
     );
 
     const serialized = new XMLSerializer().serializeToString(printSvg);
@@ -225,8 +293,10 @@ export class PrintService {
     };
   }
 
-  private static async exportVectorPdf(
-    svgPayload: SvgExportPayload,
+  private static async embedSvgInPdf(
+    svgString: string,
+    svgPixelWidth: number,
+    svgPixelHeight: number,
     options: PressPrintOptions,
     pageWidth: number,
     pageHeight: number,
@@ -241,48 +311,58 @@ export class PrintService {
     });
 
     const placement = calculateAspectFit(
-      svgPayload.width,
-      svgPayload.height,
+      svgPixelWidth,
+      svgPixelHeight,
       margin,
       margin,
       contentWidth,
       contentHeight
     );
 
-    await svg2pdf(svgPayload.svg, pdf, {
-      x: placement.x,
-      y: placement.y,
-      width: placement.width,
-      height: placement.height,
-    });
-
-    if (options.cropMarks) {
-      drawCropMarks(pdf, pageWidth, pageHeight, options.bleedMm);
+    // Vector PDF mode: try svg2pdf first for true vector output
+    // NOTE: svg2pdf uses built-in PDF fonts (Helvetica) which only support Latin-1 characters.
+    // For non-Latin text (Arabic, Cyrillic, CJK, etc.), we skip vector mode and use raster instead.
+    if (options.exportMode === 'vector_pdf') {
+      const hasNonAsciiText = /[\x80-\uFFFF]/.test(svgString);
+      if (!hasNonAsciiText) {
+        try {
+          await this.embedVectorSvg(
+            svgString,
+            pdf,
+            placement.x,
+            placement.y,
+            placement.width,
+            placement.height
+          );
+          return pdf;
+        } catch (err) {
+          console.warn('[PrintService] svg2pdf failed, falling back to raster renderer:', err);
+          // Fall through to raster fallback
+        }
+      } else {
+        console.info(
+          '[PrintService] SVG contains non-ASCII text — svg2pdf cannot render these characters correctly. ' +
+          'Falling back to raster renderer for proper text rendering.'
+        );
+      }
     }
 
-    return pdf;
-  }
+    // Raster fallback (for both vector_pdf fallback and raster_pdf mode)
+    const canvas = await PrintService.renderSvgToCanvas(
+      svgString,
+      placement.width,
+      placement.height,
+      options.dpi
+    );
 
-  private static async exportRasterPdf(
-    element: HTMLElement,
-    options: PressPrintOptions,
-    pageWidth: number,
-    pageHeight: number,
-    margin: number,
-    contentWidth: number,
-    contentHeight: number
-  ): Promise<jsPDF> {
-    const pdf = new jsPDF({
-      orientation: options.orientation,
-      unit: 'mm',
-      format: [pageWidth, pageHeight],
-    });
-
-    await this.renderRasterIntoPdf(pdf, element, options, margin, margin, contentWidth, contentHeight);
-
-    if (options.cropMarks) {
-      drawCropMarks(pdf, pageWidth, pageHeight, options.bleedMm);
-    }
+    pdf.addImage(
+      canvas.toDataURL('image/jpeg', 1.0),
+      'JPEG',
+      placement.x,
+      placement.y,
+      placement.width,
+      placement.height
+    );
 
     return pdf;
   }
@@ -299,24 +379,18 @@ export class PrintService {
   ): Promise<ExportArtifact> {
     const svgPayload = extractSvgFromElement(element);
     if (!svgPayload) {
-      throw new Error('SVG not found for tiled export.');
+      throw new Error('Tree visualization not found for tiled export. Please switch to tree view first.');
     }
 
     const overlap = options.tileOverlapMm;
     const tileW = contentWidth + overlap;
     const tileH = contentHeight + overlap;
 
-    const dpi = options.dpi;
-    const svgPixelWidth = svgPayload.width;
-    const svgPixelHeight = svgPayload.height;
-
-    const scaleToFit = Math.min(
-      contentWidth / (svgPixelWidth * 25.4 / dpi),
-      contentHeight / (svgPixelHeight * 25.4 / dpi)
-    );
-
-    const contentWidthMm = (svgPixelWidth * 25.4 / dpi) * scaleToFit;
-    const contentHeightMm = (svgPixelHeight * 25.4 / dpi) * scaleToFit;
+    // Full rendered size at the user's scale, in mm
+    // 1 CSS pixel = 25.4/96 mm at standard 96 DPI
+    const pxToMm = 25.4 / 96;
+    const contentWidthMm = svgPayload.width * pxToMm * options.scale;
+    const contentHeightMm = svgPayload.height * pxToMm * options.scale;
 
     const cols = Math.max(1, Math.ceil(contentWidthMm / tileW));
     const rows = Math.max(1, Math.ceil(contentHeightMm / tileH));
@@ -333,31 +407,87 @@ export class PrintService {
           pdf.addPage([pageWidth, pageHeight], cols > rows ? 'l' : 'p');
         }
 
+        const isLastCol = col === cols - 1;
+        const isLastRow = row === rows - 1;
+
         const tileLeftMm = col * tileW;
         const tileTopMm = row * tileH;
-        const tileWidthMm = Math.min(contentWidthMm - tileLeftMm + (col > 0 ? overlap : 0), tileW);
-        const tileHeightMm = Math.min(contentHeightMm - tileTopMm + (row > 0 ? overlap : 0), tileH);
-
-        const leftPx = (tileLeftMm / contentWidthMm) * svgPixelWidth;
-        const topPx = (tileTopMm / contentHeightMm) * svgPixelHeight;
-        const tileWPx = (tileWidthMm / contentWidthMm) * svgPixelWidth;
-        const tileHPx = (tileHeightMm / contentHeightMm) * svgPixelHeight;
-
-        const canvas = await renderSvgRegionToCanvas(
-          svgPayload,
-          leftPx,
-          topPx,
-          tileWPx,
-          tileHPx,
-          dpi,
-          tileWidthMm,
-          tileHeightMm
+        const tileWidthMm = Math.min(
+          contentWidthMm - tileLeftMm + (isLastCol ? 0 : overlap),
+          contentWidthMm - tileLeftMm + overlap
+        );
+        const tileHeightMm = Math.min(
+          contentHeightMm - tileTopMm + (isLastRow ? 0 : overlap),
+          contentHeightMm - tileTopMm + overlap
         );
 
-        const imageData = canvas.toDataURL('image/png');
+        const svgPortionLeft = tileLeftMm / contentWidthMm;
+        const svgPortionTop = tileTopMm / contentHeightMm;
+        const svgPortionWidth = tileWidthMm / contentWidthMm;
+        const svgPortionHeight = tileHeightMm / contentHeightMm;
+
+        const tileViewBox = `${svgPortionLeft * svgPayload.width} ${svgPortionTop * svgPayload.height} ${svgPortionWidth * svgPayload.width} ${svgPortionHeight * svgPayload.height}`;
+
+        const tileSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        tileSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        tileSvg.setAttribute('viewBox', tileViewBox);
+        tileSvg.setAttribute('width', `${svgPortionWidth * svgPayload.width}`);
+        tileSvg.setAttribute('height', `${svgPortionHeight * svgPayload.height}`);
+
+        for (let i = 0; i < svgPayload.svg.childNodes.length; i++) {
+          const child = svgPayload.svg.childNodes[i].cloneNode(true);
+          tileSvg.appendChild(child);
+        }
+
+        const tileSvgString = new XMLSerializer().serializeToString(tileSvg);
+
         const targetX = margin - (col > 0 ? overlap : 0);
         const targetY = margin - (row > 0 ? overlap : 0);
-        pdf.addImage(imageData, 'PNG', targetX, targetY, tileWidthMm, tileHeightMm);
+
+        // Try vector path for tiled SVG, fall back to raster
+        if (options.exportMode === 'vector_pdf') {
+          try {
+            await this.embedVectorSvg(
+              tileSvgString,
+              pdf,
+              targetX,
+              targetY,
+              tileWidthMm,
+              tileHeightMm
+            );
+          } catch {
+            // Fall through to raster
+            const canvas = await PrintService.renderSvgToCanvas(
+              tileSvgString,
+              tileWidthMm,
+              tileHeightMm,
+              options.dpi
+            );
+            pdf.addImage(
+              canvas.toDataURL('image/jpeg', 1.0),
+              'JPEG',
+              targetX,
+              targetY,
+              tileWidthMm,
+              tileHeightMm
+            );
+          }
+        } else {
+          const canvas = await PrintService.renderSvgToCanvas(
+            tileSvgString,
+            tileWidthMm,
+            tileHeightMm,
+            options.dpi
+          );
+          pdf.addImage(
+            canvas.toDataURL('image/jpeg', 1.0),
+            'JPEG',
+            targetX,
+            targetY,
+            tileWidthMm,
+            tileHeightMm
+          );
+        }
 
         if (options.cropMarks) {
           drawCropMarks(pdf, pageWidth, pageHeight, options.bleedMm);
@@ -371,56 +501,6 @@ export class PrintService {
       blob: pdf.output('blob'),
       renderMode: 'tiled_pdf',
     };
-  }
-
-  private static async renderRasterIntoPdf(
-    pdf: jsPDF,
-    element: HTMLElement,
-    options: PressPrintOptions,
-    x: number,
-    y: number,
-    width: number,
-    height: number
-  ): Promise<void> {
-    const svgPayload = extractSvgFromElement(element);
-
-    if (svgPayload) {
-      const dpi = options.dpi;
-      const targetWidthPx = Math.round((width * dpi) / 25.4);
-      const targetHeightPx = Math.round((height * dpi) / 25.4);
-
-      const canvas = await renderSvgToCanvasAtDpi(svgPayload, targetWidthPx, targetHeightPx);
-      const imageData = canvas.toDataURL('image/png');
-      pdf.addImage(imageData, 'PNG', x, y, width, height);
-    } else {
-      const rasterScale = Math.max(3, options.scale * window.devicePixelRatio);
-      const canvas = await html2canvas(element, {
-        width: element.scrollWidth,
-        height: element.scrollHeight,
-        scale: rasterScale,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        ignoreElements: (node: Element) =>
-          node.hasAttribute('data-export-ignore') || node.hasAttribute('data-html2canvas-ignore'),
-      });
-
-      const imageData = canvas.toDataURL('image/png');
-      const imageRatio = canvas.width / canvas.height;
-      const frameRatio = width / height;
-
-      let targetWidth = width;
-      let targetHeight = height;
-
-      if (imageRatio > frameRatio) {
-        targetHeight = width / imageRatio;
-      } else {
-        targetWidth = height * imageRatio;
-      }
-
-      const offsetX = x + (width - targetWidth) / 2;
-      const offsetY = y + (height - targetHeight) / 2;
-      pdf.addImage(imageData, 'PNG', offsetX, offsetY, targetWidth, targetHeight);
-    }
   }
 }
 
@@ -437,34 +517,80 @@ function sanitizeFileName(input: string): string {
 }
 
 function extractSvgFromElement(element: HTMLElement): SvgExportPayload | null {
-  const original = element.querySelector('svg');
+  // Prefer the SVG marked as the main tree visualization
+  let original = element.querySelector<SVGElement>('svg[data-tree-svg]');
+
+  // Fallback: find the largest SVG by area (avoids picking icon SVGs like PencilIcon)
+  if (!original) {
+    const allSvgs = element.querySelectorAll<SVGElement>('svg');
+
+    if (allSvgs.length === 0) {
+      console.warn('[PrintService] No SVG elements found in the tree element.');
+      return null;
+    }
+
+    // Find the largest SVG by effective area.
+    // Uses getBoundingClientRect in real browsers; falls back to width/height
+    // attributes in test environments (JSDOM returns 0×0 for unlaid-out elements).
+    let maxArea = 0;
+    let largestSvg: SVGElement | null = null;
+    allSvgs.forEach(svg => {
+      const rect = svg.getBoundingClientRect();
+      let svgWidth = rect.width;
+      let svgHeight = rect.height;
+
+      // Fallback for JSDOM / detached elements where getBoundingClientRect is 0
+      if (svgWidth === 0 && svgHeight === 0) {
+        const attrW = parseFloat(svg.getAttribute('width') || '');
+        const attrH = parseFloat(svg.getAttribute('height') || '');
+        if (attrW > 0 && attrH > 0) {
+          svgWidth = attrW;
+          svgHeight = attrH;
+        } else {
+          const vb = svg.getAttribute('viewBox');
+          if (vb) {
+            const parts = vb.trim().split(/[\s,]+/).map(Number);
+            if (parts.length === 4 && parts.every(isFinite)) {
+              svgWidth = parts[2];
+              svgHeight = parts[3];
+            }
+          }
+        }
+      }
+
+      const area = svgWidth * svgHeight;
+      if (area > maxArea) {
+        maxArea = area;
+        largestSvg = svg;
+      }
+    });
+
+    // Area threshold: typical icon SVGs (e.g., Heroicons) are ~200-500 px².
+    // A real tree visualization is always > 5000 px² because it fills the container.
+    // If the largest SVG is below this threshold, it's an icon, not the tree.
+    if (!largestSvg || maxArea < 5000) {
+      console.warn(
+        '[PrintService] Only icon-sized SVGs found (largest:',
+        Math.round(maxArea), 'px²). Switch to tree view to export the visualization.',
+      );
+      return null;
+    }
+
+    original = largestSvg;
+  }
+
   if (!original) {
     return null;
   }
 
   const clone = original.cloneNode(true) as SVGElement;
-  inlineComputedSvgStyles(original, clone);
 
-  const viewBox = clone.getAttribute('viewBox') ?? original.getAttribute('viewBox');
+  const viewBox = original.getAttribute('viewBox');
   const rect = original.getBoundingClientRect();
 
-  // Priority 1: getBoundingClientRect for actual rendered pixel dimensions.
-  // This correctly handles SVG elements with width="100%" / height="100%",
-  // which Number.parseFloat would incorrectly return as 100 instead of
-  // the actual pixel size.
   const pixelWidth = rect.width;
   const pixelHeight = rect.height;
 
-  // Priority 2: Parse width/height attributes as fallback (works in test
-  // environments where elements aren't in the DOM and getBoundingClientRect
-  // returns 0).  Skip attribute parsing if the value contains '%' since
-  // Number.parseFloat would give the wrong result.
-  const widthAttr = original.getAttribute('width');
-  const heightAttr = original.getAttribute('height');
-  const attrWidth = widthAttr && !widthAttr.includes('%') ? Number.parseFloat(widthAttr) : NaN;
-  const attrHeight = heightAttr && !heightAttr.includes('%') ? Number.parseFloat(heightAttr) : NaN;
-
-  // Priority 3: Parse viewBox as further fallback (e.g., "minX minY w h")
   let viewBoxWidth = 0;
   let viewBoxHeight = 0;
   if (viewBox) {
@@ -475,56 +601,28 @@ function extractSvgFromElement(element: HTMLElement): SvgExportPayload | null {
     }
   }
 
-  const width =
-    pixelWidth > 0 ? pixelWidth :
-    (Number.isFinite(attrWidth) && attrWidth > 0 ? attrWidth :
-    (viewBoxWidth > 0 ? viewBoxWidth : 800));
-  const height =
-    pixelHeight > 0 ? pixelHeight :
-    (Number.isFinite(attrHeight) && attrHeight > 0 ? attrHeight :
-    (viewBoxHeight > 0 ? viewBoxHeight : 600));
-
-  if (!viewBox) {
-    clone.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  } else {
-    clone.setAttribute('viewBox', viewBox);
-  }
+  const width = pixelWidth > 0 ? pixelWidth : (viewBoxWidth > 0 ? viewBoxWidth : 800);
+  const height = pixelHeight > 0 ? pixelHeight : (viewBoxHeight > 0 ? viewBoxHeight : 600);
 
   clone.setAttribute('width', `${width}`);
   clone.setAttribute('height', `${height}`);
-  clone.setAttribute('preserveAspectRatio', clone.getAttribute('preserveAspectRatio') ?? 'xMidYMid meet');
-
-  if (!clone.getAttribute('xmlns')) {
-    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  if (viewBox) {
+    clone.setAttribute('viewBox', viewBox);
   }
-  if (!clone.getAttribute('xmlns:xlink')) {
-    clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
-  }
+  clone.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 
   return { svg: clone, width, height };
 }
 
-function inlineComputedSvgStyles(source: SVGElement, target: SVGElement): void {
-  applyInlineStyle(source, target);
-
-  const sourceNodes = source.querySelectorAll('*');
-  const targetNodes = target.querySelectorAll('*');
-  const length = Math.min(sourceNodes.length, targetNodes.length);
-
-  for (let index = 0; index < length; index += 1) {
-    applyInlineStyle(sourceNodes[index], targetNodes[index]);
+function parseSvgString(svgString: string): SVGElement {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgString, 'image/svg+xml');
+  const svg = doc.querySelector('svg');
+  if (!svg) {
+    throw new Error('Parsed SVG document contains no <svg> element');
   }
-}
-
-function applyInlineStyle(sourceElement: Element, targetElement: Element): void {
-  const computed = window.getComputedStyle(sourceElement);
-  const cssText = Array.from(computed)
-    .map((propertyName) => `${propertyName}:${computed.getPropertyValue(propertyName)};`)
-    .join('');
-
-  if (cssText) {
-    targetElement.setAttribute('style', cssText);
-  }
+  return svg;
 }
 
 function calculateAspectFit(
@@ -557,8 +655,7 @@ function createPrintOptimizedSvg(
   payload: SvgExportPayload,
   pageWidthMm: number,
   pageHeightMm: number,
-  marginMm: number,
-  fontScale: number
+  marginMm: number
 ): SVGElement {
   const svg = payload.svg.cloneNode(true) as SVGElement;
 
@@ -585,147 +682,9 @@ function createPrintOptimizedSvg(
   wrapper.setAttribute('height', `${pageHeightMm}mm`);
   wrapper.setAttribute('viewBox', `0 0 ${pageWidthMm} ${pageHeightMm}`);
 
-  const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
-  style.textContent = `
-    text { font-size: ${Math.round(11 * fontScale)}px; }
-    text[font-size="10px"], text[font-size="11px"] { font-size: ${Math.round(11 * fontScale)}px; }
-  `;
-
-  wrapper.appendChild(style);
   wrapper.appendChild(group);
 
   return wrapper;
-}
-
-async function renderSvgToCanvasAtDpi(
-  payload: SvgExportPayload,
-  targetWidthPx: number,
-  targetHeightPx: number
-): Promise<HTMLCanvasElement> {
-  if (targetWidthPx > 16384 || targetHeightPx > 16384) {
-    console.warn(`Target canvas size ${targetWidthPx}x${targetHeightPx} may exceed browser limits`);
-  }
-
-  const MAX_CANVAS_PIXELS = 268_435_456; // 16384 * 16384
-  if (targetWidthPx * targetHeightPx > MAX_CANVAS_PIXELS) {
-    throw new Error(
-      `Export requires a ${targetWidthPx}×${targetHeightPx} pixel canvas which exceeds browser limits. Reduce DPI or paper size, or use SVG / Vector PDF export instead.`
-    );
-  }
-
-  const svgClone = payload.svg.cloneNode(true) as SVGElement;
-
-  const scaleX = targetWidthPx / payload.width;
-  const scaleY = targetHeightPx / payload.height;
-
-  const wrapper = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  wrapper.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  wrapper.setAttribute('width', `${targetWidthPx}`);
-  wrapper.setAttribute('height', `${targetHeightPx}`);
-  wrapper.setAttribute('viewBox', `0 0 ${targetWidthPx} ${targetHeightPx}`);
-
-  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  group.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
-
-  while (svgClone.firstChild) {
-    group.appendChild(svgClone.firstChild);
-  }
-
-  wrapper.appendChild(group);
-
-  const svgString = new XMLSerializer().serializeToString(wrapper);
-  const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-  const objectUrl = URL.createObjectURL(svgBlob);
-
-  try {
-    const image = await loadImage(objectUrl);
-    const canvas = document.createElement('canvas');
-    canvas.width = targetWidthPx;
-    canvas.height = targetHeightPx;
-    const context = canvas.getContext('2d');
-    if (!context) {
-      throw new Error('Unable to create canvas rendering context for raster export.');
-    }
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, targetWidthPx, targetHeightPx);
-    context.drawImage(image, 0, 0);
-    return canvas;
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
-async function renderSvgRegionToCanvas(
-  payload: SvgExportPayload,
-  leftPx: number,
-  topPx: number,
-  regionWidthPx: number,
-  regionHeightPx: number,
-  dpi: DpiPreset,
-  outputWidthMm: number,
-  outputHeightMm: number
-): Promise<HTMLCanvasElement> {
-  const targetWidthPx = Math.round((outputWidthMm * dpi) / 25.4);
-  const targetHeightPx = Math.round((outputHeightMm * dpi) / 25.4);
-
-  const MAX_CANVAS_PIXELS = 268_435_456; // 16384 * 16384
-  if (targetWidthPx * targetHeightPx > MAX_CANVAS_PIXELS) {
-    throw new Error(
-      `Export requires a ${targetWidthPx}×${targetHeightPx} pixel canvas which exceeds browser limits. Reduce DPI or paper size, or use SVG / Vector PDF export instead.`
-    );
-  }
-
-  const svgClone = payload.svg.cloneNode(true) as SVGElement;
-
-  const wrapper = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  wrapper.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  wrapper.setAttribute('width', `${targetWidthPx}`);
-  wrapper.setAttribute('height', `${targetHeightPx}`);
-  wrapper.setAttribute('viewBox', `0 0 ${targetWidthPx} ${targetHeightPx}`);
-
-  const scaleX = targetWidthPx / regionWidthPx;
-  const scaleY = targetHeightPx / regionHeightPx;
-  const translateX = -leftPx;
-  const translateY = -topPx;
-
-  const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  group.setAttribute('transform', `translate(${translateX * scaleX}, ${translateY * scaleY}) scale(${scaleX}, ${scaleY})`);
-
-  while (svgClone.firstChild) {
-    group.appendChild(svgClone.firstChild);
-  }
-
-  wrapper.appendChild(group);
-
-  const svgString = new XMLSerializer().serializeToString(wrapper);
-  const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-  const objectUrl = URL.createObjectURL(svgBlob);
-
-  try {
-    const image = await loadImage(objectUrl);
-    const canvas = document.createElement('canvas');
-    canvas.width = targetWidthPx;
-    canvas.height = targetHeightPx;
-    const context = canvas.getContext('2d');
-    if (!context) {
-      throw new Error('Unable to create canvas rendering context for tiled export.');
-    }
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, targetWidthPx, targetHeightPx);
-    context.drawImage(image, 0, 0);
-    return canvas;
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('Failed to load SVG into image for raster export.'));
-    image.src = url;
-  });
 }
 
 function drawCropMarks(pdf: jsPDF, pageWidth: number, pageHeight: number, bleedMm: number): void {
@@ -734,6 +693,7 @@ function drawCropMarks(pdf: jsPDF, pageWidth: number, pageHeight: number, bleedM
   pdf.setDrawColor(0, 0, 0);
   pdf.setLineWidth(0.25);
 
+  // Corner marks
   pdf.line(offset - markLength, offset, offset - 1, offset);
   pdf.line(offset, offset - markLength, offset, offset - 1);
 
@@ -743,19 +703,10 @@ function drawCropMarks(pdf: jsPDF, pageWidth: number, pageHeight: number, bleedM
   pdf.line(offset - markLength, pageHeight - offset, offset - 1, pageHeight - offset);
   pdf.line(offset, pageHeight - offset + 1, offset, pageHeight - offset + markLength);
 
-  pdf.line(
-    pageWidth - offset + 1,
-    pageHeight - offset,
-    pageWidth - offset + markLength,
-    pageHeight - offset
-  );
-  pdf.line(
-    pageWidth - offset,
-    pageHeight - offset + 1,
-    pageWidth - offset,
-    pageHeight - offset + markLength
-  );
+  pdf.line(pageWidth - offset + 1, pageHeight - offset, pageWidth - offset + markLength, pageHeight - offset);
+  pdf.line(pageWidth - offset, pageHeight - offset + 1, pageWidth - offset, pageHeight - offset + markLength);
 
+  // Center alignment marks
   const centerX = pageWidth / 2;
   const centerY = pageHeight / 2;
 

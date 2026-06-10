@@ -7,6 +7,36 @@ WORKDIR /var/www/html
 # Copy composer files first for better layer caching
 COPY composer.json composer.lock ./
 
+# Development stage (used in docker-compose for local development)
+FROM base AS development
+
+# Copy application code
+COPY . .
+
+# Create required directories and set proper permissions
+USER root
+RUN mkdir -p /var/www/html/storage/framework/cache \
+    && mkdir -p /var/www/html/storage/framework/sessions \
+    && mkdir -p /var/www/html/storage/framework/views \
+    && mkdir -p /var/www/html/storage/logs \
+    && mkdir -p /var/www/html/bootstrap/cache \
+    && chown -R www-data:www-data /var/www/html/storage \
+    && chown -R www-data:www-data /var/www/html/bootstrap/cache \
+    && chmod -R 755 /var/www/html/storage \
+    && chmod -R 755 /var/www/html/bootstrap/cache
+
+# Switch back to www-data user
+USER www-data
+
+# Install all dependencies (including dev)
+RUN composer install --optimize-autoloader --no-progress --no-interaction --no-scripts
+
+# Generate autoloader
+RUN composer dump-autoload
+
+# Expose port
+EXPOSE 8080
+
 # Production stage
 FROM base AS production
 

@@ -58,6 +58,6 @@ README.md
 *.md
 docs/
 
-# Testing
-tests/
-phpunit.xml
+# Testing (commented out - needed in dev for running tests)
+# tests/
+# phpunit.xml

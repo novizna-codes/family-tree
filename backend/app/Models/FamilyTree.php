@@ -82,7 +82,7 @@ class FamilyTree extends Model
                 'paper_size' => 'A4',
                 'orientation' => 'landscape',
                 'include_legend' => true,
-                'export_mode' => 'vector_pdf',
+                'export_mode' => 'raster_pdf',
                 'bleed_mm' => 3,
                 'safe_margin_mm' => 10,
                 'crop_marks' => false,

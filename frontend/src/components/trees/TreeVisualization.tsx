@@ -191,6 +191,7 @@ export function TreeVisualization({
     <div className={`w-full h-full overflow-hidden relative ${className}`}>
       <svg
         ref={svgRef}
+        data-tree-svg="true"
         className="w-full h-full border border-gray-200 rounded-lg bg-white block"
       >
       </svg>
