@@ -199,7 +199,7 @@ describe('DEFAULT_PRESS_OPTIONS', () => {
       exportMode: 'raster_pdf',
       tiled: false,
       tileOverlapMm: 5,
-      scale: 2,
+      scale: 1,
       dpi: 300,
     });
   });
@@ -538,18 +538,27 @@ describe('ExportArtifact (generate output structure)', () => {
 });
 
 describe('printTree error handling', () => {
-  it('throws when window.open returns null (popup blocked)', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
-
+  it('throws when no SVG element is found in the element', async () => {
     await expect(
       PrintService.printTree(document.createElement('div')),
+    ).rejects.toThrow(
+      'No tree visualization found for printing. Please switch to tree view first.',
+    );
+  });
+
+  it('throws when window.open returns null (popup blocked) even with SVG present', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+
+    const element = makeElementWithSvg(800, 600);
+    await expect(
+      PrintService.printTree(element),
     ).rejects.toThrow('Unable to open print window');
 
     openSpy.mockRestore();
   });
 
-  it('throws when window.open returns null for custom options', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+  it('handles SVG extraction failure before window.open is called', async () => {
+    const openSpy = vi.spyOn(window, 'open');
 
     await expect(
       PrintService.printTree(document.createElement('div'), {
@@ -557,8 +566,11 @@ describe('printTree error handling', () => {
         orientation: 'portrait',
         safeMarginMm: 5,
       }),
-    ).rejects.toThrow('Unable to open print window');
+    ).rejects.toThrow(
+      'No tree visualization found for printing. Please switch to tree view first.',
+    );
 
+    expect(openSpy).not.toHaveBeenCalled();
     openSpy.mockRestore();
   });
 });
@@ -819,5 +831,87 @@ describe('extractSvgFromElement (data-tree-svg attribute)', () => {
     expect(match).not.toBeNull();
     const scale = parseFloat(match![1]);
     expect(scale).toBeGreaterThan(1);
+  });
+});
+
+describe('applyScaleToSvg (tested via raster_pdf blob)', () => {
+  it('does not modify viewBox when scale is 1', async () => {
+    const element = makeElementWithSvg(800, 600, '0 0 4000 3000', 1200, 900);
+    await PrintService.generate(createTree(), element, {
+      exportMode: 'raster_pdf',
+      scale: 1,
+    });
+
+    expect(mockPdfInstance.addImage).toHaveBeenCalled();
+  });
+
+  it('zooms into center when scale > 1', async () => {
+    const element = makeElementWithSvg(800, 600, '0 0 4000 3000', 1200, 900);
+    await PrintService.generate(createTree(), element, {
+      exportMode: 'raster_pdf',
+      scale: 2,
+    });
+
+    expect(mockPdfInstance.addImage).toHaveBeenCalled();
+  });
+});
+
+describe('printTree with SVG content', () => {
+  it('opens print window and writes SVG image', async () => {
+    const mockPrintFn = vi.fn();
+    const mockWindow = {
+      document: {
+        write: vi.fn(),
+        close: vi.fn(),
+        querySelector: vi.fn(() => null),
+      },
+      focus: vi.fn(),
+      print: mockPrintFn,
+      close: vi.fn(),
+      onafterprint: null as ((this: Window, ev: Event) => any) | null,
+    };
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(mockWindow as any);
+
+    const element = makeElementWithSvg(800, 600, '0 0 4000 3000', 1200, 900);
+    PrintService.printTree(element, { paperSize: 'A4', scale: 1 });
+
+    expect(openSpy).toHaveBeenCalledWith('', '_blank');
+    expect(mockWindow.document.write).toHaveBeenCalled();
+    const writeCall = (mockWindow.document.write as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(writeCall).toContain('data:image/svg+xml');
+    expect(writeCall).toContain('class="tree-print-image"');
+    expect(mockWindow.focus).toHaveBeenCalled();
+
+    openSpy.mockRestore();
+  });
+
+  it('applies scale to SVG viewBox in print window', async () => {
+    const mockWindow = {
+      document: {
+        write: vi.fn(),
+        close: vi.fn(),
+        querySelector: vi.fn(() => null),
+      },
+      focus: vi.fn(),
+      print: vi.fn(),
+      close: vi.fn(),
+      onafterprint: null as ((this: Window, ev: Event) => any) | null,
+    };
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(mockWindow as any);
+
+    const element = makeElementWithSvg(800, 600, '0 0 4000 3000', 1200, 900);
+
+    PrintService.printTree(element, { scale: 1 });
+    const unscaledCall = (mockWindow.document.write as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    (mockWindow.document.write as ReturnType<typeof vi.fn>).mockClear();
+
+    PrintService.printTree(element, { scale: 2 });
+    const scaledCall = (mockWindow.document.write as ReturnType<typeof vi.fn>).mock.calls[0][0];
+
+    const encodedOriginalViewBox = encodeURIComponent('viewBox="0 0 4000 3000"');
+    expect(unscaledCall).toContain(encodedOriginalViewBox);
+    expect(scaledCall).not.toContain(encodedOriginalViewBox);
+
+    openSpy.mockRestore();
   });
 });

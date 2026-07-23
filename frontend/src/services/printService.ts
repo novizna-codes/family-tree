@@ -38,7 +38,7 @@ export const DEFAULT_PRESS_OPTIONS: PressPrintOptions = {
   exportMode: 'raster_pdf',
   tiled: false,
   tileOverlapMm: 5,
-  scale: 2,
+  scale: 1,
   dpi: 300,
 };
 
@@ -139,23 +139,29 @@ export class PrintService {
     options: Partial<PressPrintOptions> = {}
   ): Promise<void> {
     const mergedOptions = { ...DEFAULT_PRESS_OPTIONS, ...options };
+    const svgPayload = extractSvgFromElement(element);
+
+    if (!svgPayload) {
+      throw new Error('No tree visualization found for printing. Please switch to tree view first.');
+    }
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       throw new Error('Unable to open print window. Please check popup blockers.');
     }
 
     try {
-      const clonedElement = element.cloneNode(true) as HTMLElement;
+      const svgString = new XMLSerializer().serializeToString(svgPayload.svg);
+      const effectiveSvg = applyScaleToSvg(svgString, mergedOptions.scale);
 
-      // Remove UI overlays that should not appear in print
-      const ignoreSelectors = '[data-html2canvas-ignore], [data-export-ignore]';
-      const elementsToRemove = clonedElement.querySelectorAll(ignoreSelectors);
-      elementsToRemove.forEach(el => el.remove());
+      const svgDataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(effectiveSvg);
 
       const [pageWidth, pageHeight] = getPageDimensionsMm(
         mergedOptions.paperSize,
         mergedOptions.orientation
       );
+
+      const margin = Math.max(0, mergedOptions.safeMarginMm + mergedOptions.bleedMm);
 
       printWindow.document.write(`
         <!DOCTYPE html>
@@ -165,29 +171,54 @@ export class PrintService {
           <style>
             @page {
               size: ${pageWidth}mm ${pageHeight}mm;
-              margin: ${mergedOptions.safeMarginMm}mm;
+              margin: ${margin}mm;
             }
             @media print {
               body { margin: 0; padding: 0; }
               * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
             }
-            body { font-family: Arial, sans-serif; }
+            html, body {
+              margin: 0;
+              padding: 0;
+              width: 100%;
+              height: 100%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+            img.tree-print-image {
+              max-width: 100%;
+              max-height: 100%;
+              object-fit: contain;
+            }
           </style>
         </head>
-        <body></body>
+        <body>
+          <img src="${svgDataUri}" class="tree-print-image" alt="Family Tree" />
+        </body>
         </html>
       `);
       printWindow.document.close();
       printWindow.focus();
 
-      // Use DOM importNode instead of innerHTML to prevent XSS
-      // from person names containing malicious HTML/script tags
-      const importedNode = printWindow.document.importNode(clonedElement, true);
-      printWindow.document.body.appendChild(importedNode);
-
-      setTimeout(() => {
-        printWindow.print();
-      }, 300);
+      const img = printWindow.document.querySelector<HTMLImageElement>('img.tree-print-image');
+      if (img) {
+        img.onload = () => {
+          setTimeout(() => {
+            printWindow.print();
+          }, 100);
+        };
+        img.onerror = () => {
+          console.warn('[PrintService] Image load failed in print window');
+          setTimeout(() => {
+            printWindow.print();
+          }, 100);
+        };
+      } else {
+        setTimeout(() => {
+          printWindow.print();
+        }, 300);
+      }
 
       printWindow.onafterprint = () => {
         printWindow.close();
@@ -310,6 +341,8 @@ export class PrintService {
       format: [pageWidth, pageHeight],
     });
 
+    const effectiveSvg = applyScaleToSvg(svgString, options.scale);
+
     const placement = calculateAspectFit(
       svgPixelWidth,
       svgPixelHeight,
@@ -319,15 +352,12 @@ export class PrintService {
       contentHeight
     );
 
-    // Vector PDF mode: try svg2pdf first for true vector output
-    // NOTE: svg2pdf uses built-in PDF fonts (Helvetica) which only support Latin-1 characters.
-    // For non-Latin text (Arabic, Cyrillic, CJK, etc.), we skip vector mode and use raster instead.
     if (options.exportMode === 'vector_pdf') {
-      const hasNonAsciiText = /[\x80-\uFFFF]/.test(svgString);
+      const hasNonAsciiText = /[\x80-\uFFFF]/.test(effectiveSvg);
       if (!hasNonAsciiText) {
         try {
           await this.embedVectorSvg(
-            svgString,
+            effectiveSvg,
             pdf,
             placement.x,
             placement.y,
@@ -337,7 +367,6 @@ export class PrintService {
           return pdf;
         } catch (err) {
           console.warn('[PrintService] svg2pdf failed, falling back to raster renderer:', err);
-          // Fall through to raster fallback
         }
       } else {
         console.info(
@@ -347,9 +376,8 @@ export class PrintService {
       }
     }
 
-    // Raster fallback (for both vector_pdf fallback and raster_pdf mode)
     const canvas = await PrintService.renderSvgToCanvas(
-      svgString,
+      effectiveSvg,
       placement.width,
       placement.height,
       options.dpi
@@ -502,6 +530,29 @@ export class PrintService {
       renderMode: 'tiled_pdf',
     };
   }
+}
+
+function applyScaleToSvg(svgString: string, scale: number): string {
+  if (scale <= 1) return svgString;
+
+  const viewBoxMatch = svgString.match(/viewBox="([^"]+)"/);
+  if (!viewBoxMatch) return svgString;
+
+  const parts = viewBoxMatch[1].trim().split(/[\s,]+/).map(Number);
+  if (parts.length !== 4 || !parts.every(Number.isFinite)) return svgString;
+
+  const [vbX, vbY, vbW, vbH] = parts;
+  const centerX = vbX + vbW / 2;
+  const centerY = vbY + vbH / 2;
+  const newW = vbW / scale;
+  const newH = vbH / scale;
+  const newX = centerX - newW / 2;
+  const newY = centerY - newH / 2;
+
+  return svgString.replace(
+    /viewBox="[^"]+"/,
+    `viewBox="${newX} ${newY} ${newW} ${newH}"`
+  );
 }
 
 function getPageDimensionsMm(paperSize: PaperSize, orientation: Orientation): [number, number] {

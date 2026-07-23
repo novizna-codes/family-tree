@@ -28,7 +28,7 @@ vi.mock('@/services/printService', () => ({
     exportMode: 'vector_pdf',
     tiled: false,
     tileOverlapMm: 5,
-    scale: 2,
+    scale: 1,
   },
   PrintService: {
     generate: vi.fn(),
